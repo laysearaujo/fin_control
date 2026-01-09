@@ -83,8 +83,8 @@
         <div class="col-md-3">
             <div class="card card-custom p-3 bg-white border-start border-4 border-danger h-100 shadow-sm">
                 <h6 class="text-muted small">⚠️ A Pagar (Restante)</h6>
-                <h3 class="fw-bold text-danger">R$ {{ total_fixos_pendentes|add:total_cartao|floatformat:2 }}</h3>
-                <small class="text-muted">Contas Abertas + Fatura</small>
+                <h3 class="fw-bold text-danger">R$ {{ total_restante_a_pagar|floatformat:2 }}</h3>
+                <small class="text-muted">Contas Pendentes + Fatura</small>
             </div>
         </div>
 
@@ -92,7 +92,7 @@
             <div class="card card-custom p-3 bg-white border-start border-4 border-primary h-100 shadow-sm opacity-75">
                 <h6 class="text-muted small">🔮 Previsão Fim do Mês</h6>
                 <h3 class="fw-bold text-primary">R$ {{ saldo_projetado|floatformat:2 }}</h3>
-                <small class="text-muted">Se pagar tudo certinho</small>
+                <small class="text-muted">Saldo Hoje - Restante a Pagar</small>
             </div>
         </div>
     {% endif %}
@@ -112,6 +112,7 @@
         </div>
     </div>
 </div>
+
 <div class="row">
     
     <div class="col-md-6">
@@ -154,13 +155,10 @@
                                     {% if eh_passado %}
                                         <span class="text-danger fw-bold"> Pendente </span>
                                     {% else %}
-                                        
                                         {% if item.eh_cartao %}
                                             <div class="d-flex flex-column align-items-end">
                                                 <span class="fw-bold text-muted">R$ {{ item.valor_previsto }}</span>
-                                                <span class="badge bg-warning text-dark border" style="font-size: 0.7em">
-                                                    No Cartão 🔒
-                                                </span>
+                                                <span class="badge bg-warning text-dark border" style="font-size: 0.7em">No Cartão 🔒</span>
                                             </div>
                                         {% else %}
                                             <div class="mb-1 fw-bold text-dark">R$ {{ item.valor_previsto }}</div>
@@ -169,7 +167,6 @@
                                             Pagar
                                             </a>
                                         {% endif %}
-
                                     {% endif %}
                                 {% endif %}
                             </td>
@@ -210,17 +207,70 @@
                 </div>
                 
                 {% if not eh_passado and total_cartao > 0 %}
-                    <a href="{% url 'pagar_fatura_mensal' %}?mes={{ data_ref.month }}&ano={{ data_ref.year }}" 
-                       class="btn btn-dark w-100 mb-2"
-                       onclick="return confirm('Confirmar pagamento de R$ {{ total_cartao }}? O valor será descontado do seu saldo.')">
+                    <button type="button" class="btn btn-dark w-100 mb-2" data-bs-toggle="modal" data-bs-target="#modalConfirmarPgto">
                        ✅ Pagar Fatura Agora
-                    </a>
+                    </button>
                 {% endif %}
             {% endif %}
 
             {% if not fatura_paga %}
                 <a href="{% url 'gerenciar_cartoes' %}" class="btn btn-sm btn-outline-secondary w-100 mt-auto">Gerenciar Cartões</a>
             {% endif %}
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalConfirmarPgto" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title fw-bold">💸 Confirmar Pagamento</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center py-4">
+                    <h5 class="mb-3">Você vai pagar a fatura de <strong>{{ data_ref|date:"F/Y" }}</strong>?</h5>
+                    <h1 class="text-danger fw-bold my-3">R$ {{ total_cartao|floatformat:2 }}</h1>
+                    <p class="text-muted">Esse valor será descontado do seu saldo atual.</p>
+                </div>
+                <div class="modal-footer justify-content-center">
+                    <button type="button" class="btn btn-outline-secondary px-4" data-bs-dismiss="modal">Cancelar</button>
+                    <a href="{% url 'pagar_fatura_mensal' %}?mes={{ data_ref.month }}&ano={{ data_ref.year }}" class="btn btn-success px-5 fw-bold">
+                        Sim, Pagar!
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalFatura" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold">Detalhes da Fatura ({{ data_ref|date:"F/Y" }})</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <ul class="list-group list-group-flush">
+                    {% for item in itens_fatura_detalhe %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            {{ item.desc }}
+                            {% if item.tipo == 'fixo' %}
+                                <span class="badge bg-info text-dark" style="font-size:0.7em">Assinatura</span>
+                            {% endif %}
+                        </div>
+                        <span class="fw-bold">R$ {{ item.valor }}</span>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-center text-muted">Nada consta nesta fatura.</li>
+                    {% endfor %}
+                </ul>
+                <hr>
+                <div class="d-flex justify-content-between px-3">
+                    <strong>TOTAL:</strong>
+                    <strong class="text-danger">R$ {{ total_cartao|floatformat:2 }}</strong>
+                </div>
+            </div>
         </div>
     </div>
 </div>
