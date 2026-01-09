@@ -1,9 +1,9 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Sum
 from django.utils import timezone
-from datetime import date
+from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
-from .models import Parcela, Receita, GastoFixo, Transacao, Categoria, CartaoCredito, ReceitaFixa, Caixinha, EmprestimoProprio
+from .models import Parcela, Receita, GastoFixo, Transacao, Categoria, CartaoCredito, ReceitaFixa, Caixinha, EmprestimoProprio, ContaAvulsa
 from .forms import (
     TransacaoForm, ReceitaForm, CartaoForm, CategoriaForm, 
     GastoFixoForm, SimulacaoForm, ReceitaFixaForm,
@@ -27,7 +27,6 @@ def dashboard(request):
     ano_url = request.GET.get('ano')
     data_hoje = timezone.now().date()
     
-    # Data Visualizada (Target)
     if mes_url and ano_url:
         data_ref = date(int(ano_url), int(mes_url), 1)
     else:
@@ -36,7 +35,6 @@ def dashboard(request):
     mes_anterior = data_ref - relativedelta(months=1)
     proximo_mes = data_ref + relativedelta(months=1)
     
-    # Data Real Atual (O Hoje)
     inicio_mes_atual_real = date(data_hoje.year, data_hoje.month, 1)
     
     eh_passado = data_ref < inicio_mes_atual_real
@@ -44,9 +42,8 @@ def dashboard(request):
     eh_corrente = (data_ref == inicio_mes_atual_real)
 
     # =========================================================================
-    # 1. CÁLCULO DA BASE (PREVISÃO DO MÊS ATUAL - JANEIRO)
+    # 1. CÁLCULO DA BASE (PREVISÃO DO MÊS ATUAL)
     # =========================================================================
-    # Tudo começa aqui. Calculamos quanto vai sobrar no seu bolso HOJE (Mês Corrente).
     
     # A. Saldo Real HOJE
     r_hoje = Receita.objects.filter(data__lte=data_hoje).aggregate(Sum('valor'))['valor__sum'] or 0
@@ -60,11 +57,19 @@ def dashboard(request):
         if not ja_recebeu:
             saldo_base += r_fixa.valor
             
-    # Despesas Banco
+    # Despesas Fixas Banco
     for fixo in GastoFixo.objects.filter(eh_cartao=False):
         pago = Transacao.objects.filter(gasto_fixo=fixo, data_compra__month=data_hoje.month, data_compra__year=data_hoje.year).exists()
         if not pago:
             saldo_base -= fixo.valor_previsto
+
+    # [NOVO] Contas Avulsas do Mês Atual
+    avulsas_hoje = ContaAvulsa.objects.filter(data_vencimento__month=data_hoje.month, data_vencimento__year=data_hoje.year)
+    for avulsa in avulsas_hoje:
+        # Verifica se pagou buscando pelo vínculo ou descrição/valor
+        pago = Transacao.objects.filter(conta_avulsa=avulsa).exists()
+        if not pago:
+            saldo_base -= avulsa.valor
             
     # Fatura Cartão Janeiro
     desc_fat_atual = f"Pgto Fatura Cartão ({data_hoje.month}/{data_hoje.year})"
@@ -76,54 +81,44 @@ def dashboard(request):
                 soma_assin += f.valor_previsto
         saldo_base -= (soma_parc + soma_assin)
 
-    # AGORA 'saldo_base' É A PROJEÇÃO DO FIM DE JANEIRO (Ex: 146.52)
-
     # =========================================================================
     # 2. DEFINIÇÃO DO SALDO ANTERIOR (COM LOOP CASCATA)
     # =========================================================================
     
     if eh_futuro:
-        # Se estamos olhando MARÇO, precisamos somar o lucro de FEVEREIRO.
-        # Loop: Começa no próximo mês (Fev) e vai até o mês anterior ao alvo.
-        
-        saldo_acumulado = saldo_base # Começa com a sobra de Janeiro
-        
-        # Iterador: Começa no dia 1 do mês seguinte ao atual (ex: 01/02/2026)
+        saldo_acumulado = saldo_base 
         mes_iteracao = inicio_mes_atual_real + relativedelta(months=1)
         
-        # Enquanto o mês da iteração for MENOR que o mês da tela (ex: Fev < Mar)
         while mes_iteracao < data_ref:
-            
-            # A. Receitas Fixas do Mês Intermediário
+            # Receitas
             receitas_mes = ReceitaFixa.objects.aggregate(Sum('valor'))['valor__sum'] or 0
             
-            # B. Gastos Fixos (Banco) do Mês Intermediário
+            # Gastos Fixos
             gastos_banco_mes = GastoFixo.objects.filter(eh_cartao=False).aggregate(Sum('valor_previsto'))['valor_previsto__sum'] or 0
             
-            # C. Fatura Estimada do Mês Intermediário (Parcelas + Assinaturas)
+            # [NOVO] Contas Avulsas do Mês Intermediário
+            avulsas_mes = ContaAvulsa.objects.filter(data_vencimento__month=mes_iteracao.month, data_vencimento__year=mes_iteracao.year).aggregate(Sum('valor'))['valor__sum'] or 0
+
+            # Fatura Estimada
             parcelas_mes = Parcela.objects.filter(data_vencimento__month=mes_iteracao.month, data_vencimento__year=mes_iteracao.year).aggregate(Sum('valor'))['valor__sum'] or 0
             assinaturas_mes = GastoFixo.objects.filter(eh_cartao=True).aggregate(Sum('valor_previsto'))['valor_previsto__sum'] or 0
             fatura_mes = parcelas_mes + assinaturas_mes
             
-            # Soma Líquida: O que entrou - (O que saiu banco + Fatura)
-            saldo_liquido_mes = receitas_mes - (gastos_banco_mes + fatura_mes)
+            # Soma Líquida (Incluindo Avulsas)
+            saldo_liquido_mes = receitas_mes - (gastos_banco_mes + avulsas_mes + fatura_mes)
             
-            # Acumula no saldo
             saldo_acumulado += saldo_liquido_mes
-            
-            # Avança para o próximo mês
             mes_iteracao += relativedelta(months=1)
             
         saldo_anterior = saldo_acumulado
 
     else:
-        # Passado/Presente: Usa histórico real
         hist_r = Receita.objects.filter(data__lt=data_ref).aggregate(Sum('valor'))['valor__sum'] or 0
         hist_d = Transacao.objects.filter(eh_cartao=False, data_compra__lt=data_ref).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
         saldo_anterior = hist_r - hist_d
 
     # =========================================================================
-    # 3. DADOS DA TELA (NORMAL)
+    # 3. DADOS DA TELA
     # =========================================================================
     
     # Fatura Cartão
@@ -153,7 +148,6 @@ def dashboard(request):
     if eh_corrente:
         for r_fixa in ReceitaFixa.objects.all():
             if data_hoje.day >= r_fixa.dia_recebimento:
-                # Evita duplicação se já lançado
                 if not Receita.objects.filter(descricao=r_fixa.descricao, data__month=data_hoje.month, data__year=data_hoje.year).exists():
                     receitas_reais_mes += r_fixa.valor
     elif eh_passado:
@@ -161,30 +155,53 @@ def dashboard(request):
 
     saidas_reais_mes = Transacao.objects.filter(eh_cartao=False, data_compra__month=data_ref.month, data_compra__year=data_ref.year).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
     
-    # Saldo Real (Visual)
     if eh_futuro:
         saldo_real_atual = saldo_anterior 
     else:
         saldo_real_atual = saldo_anterior + receitas_reais_mes - saidas_reais_mes
 
-    # Pendências
+    # =========================================================================
+    # 4. LISTA DE CONTAS (MISTURA FIXO E AVULSO)
+    # =========================================================================
     lista_fixos_status = []
-    total_fixos_pendentes_banco = 0
+    total_pendentes_banco = 0 # Variável unificada
+    
+    # A. Gastos Fixos
     for fixo in GastoFixo.objects.all():
         pagamento = Transacao.objects.filter(gasto_fixo=fixo, data_compra__month=data_ref.month, data_compra__year=data_ref.year).first()
         status = 'pago' if pagamento else 'pendente'
         valor_pago = pagamento.valor_total if pagamento else 0
         if status == 'pendente' and not fixo.eh_cartao:
-            total_fixos_pendentes_banco += fixo.valor_previsto
-        lista_fixos_status.append({'id': fixo.id, 'nome': fixo.nome, 'status': status, 'valor_previsto': fixo.valor_previsto, 'valor_pago': valor_pago, 'dia': fixo.dia_vencimento, 'eh_cartao': fixo.eh_cartao})
+            total_pendentes_banco += fixo.valor_previsto
+        
+        lista_fixos_status.append({
+            'id': fixo.id, 'nome': fixo.nome, 'status': status, 
+            'valor_previsto': fixo.valor_previsto, 'valor_pago': valor_pago, 
+            'dia': fixo.dia_vencimento, 'eh_cartao': fixo.eh_cartao, 'tipo': 'fixo'
+        })
 
+    # [NOVO] B. Contas Avulsas (Só deste mês)
+    avulsas_tela = ContaAvulsa.objects.filter(data_vencimento__month=data_ref.month, data_vencimento__year=data_ref.year)
+    for avulsa in avulsas_tela:
+        pagamento = Transacao.objects.filter(conta_avulsa=avulsa).first()
+        status = 'pago' if pagamento else 'pendente'
+        
+        if status == 'pendente':
+            total_pendentes_banco += avulsa.valor
+            
+        lista_fixos_status.append({
+            'id': avulsa.id, 'nome': avulsa.titulo, 'status': status,
+            'valor_previsto': avulsa.valor, 'valor_pago': avulsa.valor if status == 'pago' else 0,
+            'dia': avulsa.data_vencimento.day, 'eh_cartao': False, 'tipo': 'avulsa'
+        })
+
+    # Totais Finais
     desc_busca = f"Pgto Fatura Cartão ({data_ref.month}/{data_ref.year})"
     fatura_paga = Transacao.objects.filter(eh_pagamento_fatura=True, descricao=desc_busca).exists()
 
     valor_fatura_pendente = 0 if fatura_paga else total_cartao_mes
-    total_restante_a_pagar = total_fixos_pendentes_banco + valor_fatura_pendente
+    total_restante_a_pagar = total_pendentes_banco + valor_fatura_pendente
 
-    # Projeção Final
     falta_entrar = total_receitas_previsto - receitas_reais_mes
     if falta_entrar < 0: falta_entrar = 0 
 
@@ -209,9 +226,11 @@ def dashboard(request):
         'itens_fatura_detalhe': itens_fatura_detalhe, 
         'fatura_paga': fatura_paga,
         'total_investido': Caixinha.objects.aggregate(Sum('saldo_atual'))['saldo_atual__sum'] or 0,
+        
+        # [NOVO] Categorias para o Modal
+        'categorias': Categoria.objects.all(),
     }
     return render(request, 'dashboard.html', context)
-
 # --- CAIXINHAS E EMPRÉSTIMOS ---
 def caixinhas(request):
     lista = Caixinha.objects.all()
@@ -640,3 +659,86 @@ def pagar_fatura_mensal(request):
     # 3. O PULO DO GATO: Redireciona para o mês que você estava olhando!
     # Se você pagou Fevereiro, volta para Fevereiro.
     return redirect(f'/?mes={mes}&ano={ano}')
+
+def adicionar_conta_avulsa(request):
+    if request.method == 'POST':
+        titulo = request.POST.get('titulo')
+        valor = request.POST.get('valor')
+        data_venc = request.POST.get('data_vencimento')
+        categoria_id = request.POST.get('categoria_id') # Pega o ID do HTML
+        
+        # Busca o objeto categoria no banco
+        categoria_obj = None
+        if categoria_id:
+            categoria_obj = Categoria.objects.get(id=categoria_id)
+
+        ContaAvulsa.objects.create(
+            titulo=titulo,
+            valor=valor,
+            data_vencimento=data_venc,
+            categoria=categoria_obj # Salva aqui
+        )
+        
+        data_obj = datetime.strptime(data_venc, '%Y-%m-%d').date()
+        return redirect(f'/?mes={data_obj.month}&ano={data_obj.year}')
+    
+    return redirect('/')
+
+def pagar_conta_avulsa(request, id):
+    conta = ContaAvulsa.objects.get(id=id)
+    
+    # Cria a transação usando a categoria que foi definida na conta avulsa
+    Transacao.objects.create(
+        descricao=conta.titulo,
+        valor_total=conta.valor,
+        data_compra=timezone.now().date(),
+        eh_cartao=False,
+        conta_avulsa_id=id,
+        categoria=conta.categoria # <--- O PULO DO GATO: Passa a categoria pra frente
+    )
+    
+    mes = request.GET.get('mes')
+    ano = request.GET.get('ano')
+    return redirect(f'/?mes={mes}&ano={ano}')
+
+def apagar_conta_avulsa(request, id):
+    conta = ContaAvulsa.objects.get(id=id)
+    
+    # Salva a data para redirecionar para o mês certo
+    mes = conta.data_vencimento.month
+    ano = conta.data_vencimento.year
+    
+    conta.delete()
+    
+    return redirect(f'/?mes={mes}&ano={ano}')
+
+def editar_conta_avulsa(request, id):
+    conta = ContaAvulsa.objects.get(id=id)
+    
+    if request.method == 'POST':
+        conta.titulo = request.POST.get('titulo')
+        conta.valor = request.POST.get('valor')
+        
+        # Converte a data string para objeto date
+        nova_data = request.POST.get('data_vencimento')
+        conta.data_vencimento = datetime.strptime(nova_data, '%Y-%m-%d').date()
+        
+        cat_id = request.POST.get('categoria_id')
+        if cat_id:
+            conta.categoria_id = cat_id
+            
+        conta.save()
+        
+        # SE JÁ TIVER PAGO, ATUALIZA A TRANSAÇÃO TAMBÉM
+        transacao = Transacao.objects.filter(conta_avulsa=conta).first()
+        if transacao:
+            transacao.descricao = conta.titulo
+            transacao.valor_total = conta.valor
+            transacao.categoria = conta.categoria
+            # A data da compra mantemos a original do pagamento
+            transacao.save()
+            
+        # Redireciona para o mês da NOVA data de vencimento
+        return redirect(f'/?mes={conta.data_vencimento.month}&ano={conta.data_vencimento.year}')
+    
+    return redirect('/')

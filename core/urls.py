@@ -43,4 +43,9 @@ urlpatterns = [
     path('relatorios/anual/', views.relatorio_anual, name='relatorio_anual'),
 
     path('fatura/pagar/', views.pagar_fatura_mensal, name='pagar_fatura_mensal'),
+    
+    path('adicionar-conta-avulsa/', views.adicionar_conta_avulsa, name='adicionar_conta_avulsa'),
+    path('pagar-conta-avulsa/<int:id>/', views.pagar_conta_avulsa, name='pagar_conta_avulsa'),
+    path('apagar-conta-avulsa/<int:id>/', views.apagar_conta_avulsa, name='apagar_conta_avulsa'),
+    path('editar-conta-avulsa/<int:id>/', views.editar_conta_avulsa, name='editar_conta_avulsa'),
 ]
