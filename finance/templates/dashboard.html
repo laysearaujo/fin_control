@@ -1,49 +1,228 @@
-{% extends 'base.html' %} {% block content %}
-<div class="row mb-4">
-    <div class="col-md-12">
-        <h2 class="fw-bold text-dark">Olá! 👋</h2>
-        <p class="text-muted">Aqui está o resumo do seu mês.</p>
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-5 bg-white p-3 rounded shadow-sm">
+    <a href="{{ mes_ant_url }}" class="btn btn-outline-dark">&laquo; Anterior</a>
+    
+    <div class="text-center">
+        <h2 class="fw-bold m-0 text-capitalize">{{ data_ref|date:"F Y" }}</h2> 
+        <small class="text-muted">
+            {% if eh_passado %}Histórico Fechado{% elif eh_futuro %}Previsão Futura{% else %}Mês Atual (Em Andamento){% endif %}
+        </small>
     </div>
+    
+    <a href="{{ prox_mes_url }}" class="btn btn-outline-dark">Próximo &raquo;</a>
 </div>
 
 <div class="row mb-4">
-    <div class="col-md-4">
-        <div class="card card-custom p-4 bg-white">
-            <h6 class="text-muted">Saldo Livre</h6>
-            <h2 class="fw-bold {% if saldo < 0 %}text-danger{% else %}text-success{% endif %}">
-                R$ {{ saldo|floatformat:2 }}
-            </h2>
+    
+    <div class="col-md-3">
+        <div class="card card-custom p-3 bg-light border-start border-4 border-secondary h-100 shadow-sm">
+            <h6 class="text-muted small">⏮️ Veio do mês anterior</h6>
+            <h3 class="fw-bold {% if saldo_anterior < 0 %}text-danger{% else %}text-dark{% endif %}">
+                R$ {{ saldo_anterior|floatformat:2 }}
+            </h3>
+            <small class="text-muted">Acumulado histórico</small>
         </div>
     </div>
-    <div class="col-md-4">
-        <div class="card card-custom p-4 bg-white">
-            <h6 class="text-muted">Receitas</h6>
-            <h3 class="fw-bold text-primary">R$ {{ total_receitas|floatformat:2 }}</h3>
+
+    {% if eh_passado %}
+        <div class="col-md-3">
+            <div class="card card-custom p-3 bg-white h-100 shadow-sm">
+                <h6 class="text-success small">💰 Entrou (Real)</h6>
+                <h3 class="fw-bold text-success">R$ {{ receitas_reais_mes|floatformat:2 }}</h3>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-custom p-3 bg-white h-100 shadow-sm">
+                <h6 class="text-danger small">💸 Saiu (Real)</h6>
+                <h3 class="fw-bold text-danger">R$ {{ saidas_reais_mes|floatformat:2 }}</h3>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-custom p-3 bg-secondary text-white h-100 shadow-sm">
+                <h6 class="text-white-50 small">🏁 Fechamento</h6>
+                <h3 class="fw-bold">R$ {{ saldo_real_atual|floatformat:2 }}</h3>
+                <small class="text-white-50">Saldo final deste mês</small>
+            </div>
+        </div>
+
+    {% elif eh_futuro %}
+        <div class="col-md-3">
+            <div class="card card-custom p-3 bg-white border-start border-4 border-success h-100 shadow-sm">
+                <h6 class="text-muted small">💰 Receitas Previstas</h6>
+                <h3 class="fw-bold text-success">R$ {{ total_receitas_previsto|floatformat:2 }}</h3>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-custom p-3 bg-white border-start border-4 border-danger h-100 shadow-sm">
+                <h6 class="text-muted small">📉 Saídas Previstas</h6>
+                <h3 class="fw-bold text-danger">R$ {{ total_saidas_previsto|floatformat:2 }}</h3>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-custom p-3 bg-white border-start border-4 border-primary h-100 shadow-sm">
+                <h6 class="text-muted small">🔮 Projeção Final</h6>
+                <h3 class="fw-bold text-primary">R$ {{ saldo_projetado|floatformat:2 }}</h3>
+            </div>
+        </div>
+
+    {% else %}
+        <div class="col-md-3">
+            <div class="card card-custom p-3 bg-dark text-white h-100 shadow">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="text-white-50 m-0">🏦 Saldo Hoje (Real)</h6>
+                    <span class="badge bg-success">Agora</span>
+                </div>
+                <h2 class="fw-bold">R$ {{ saldo_real_atual|floatformat:2 }}</h2>
+                <small class="text-white-50">Disponível no bolso</small>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card card-custom p-3 bg-white border-start border-4 border-danger h-100 shadow-sm">
+                <h6 class="text-muted small">⚠️ A Pagar (Restante)</h6>
+                <h3 class="fw-bold text-danger">R$ {{ total_fixos_pendentes|add:total_cartao|floatformat:2 }}</h3>
+                <small class="text-muted">Contas Abertas + Fatura</small>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card card-custom p-3 bg-white border-start border-4 border-primary h-100 shadow-sm opacity-75">
+                <h6 class="text-muted small">🔮 Previsão Fim do Mês</h6>
+                <h3 class="fw-bold text-primary">R$ {{ saldo_projetado|floatformat:2 }}</h3>
+                <small class="text-muted">Se pagar tudo certinho</small>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card card-custom p-3 bg-success text-white shadow-sm d-flex flex-row justify-content-between align-items-center">
+            <div>
+                <h5 class="m-0 fw-bold">🐖 Dinheiro Guardado (Caixinhas)</h5>
+                <small class="text-white-50">Reserva, Metas e Investimentos</small>
+            </div>
+            <div class="text-end">
+                <h2 class="fw-bold m-0">R$ {{ total_investido|floatformat:2 }}</h2>
+                <a href="{% url 'caixinhas' %}" class="btn btn-sm btn-light text-success fw-bold mt-1">Gerenciar Caixinhas</a>
+            </div>
         </div>
     </div>
-    <div class="col-md-4">
-        <div class="card card-custom p-4 bg-white">
-            <h6 class="text-muted">Contas + Cartão</h6>
-            <h3 class="fw-bold text-danger">R$ {{ total_saidas|floatformat:2 }}</h3>
+</div>
+<div class="row">
+    
+    <div class="col-md-6">
+        <div class="card card-custom p-4 h-100 shadow-sm">
+            <div class="d-flex justify-content-between mb-3">
+                <h5 class="fw-bold">🏠 Contas {% if eh_passado %}Fechadas{% else %}do Mês{% endif %}</h5>
+                {% if not eh_passado %}
+                <a href="{% url 'gerenciar_fixos' %}" class="small text-decoration-none">Editar Lista</a>
+                {% endif %}
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <tbody>
+                        {% for item in lista_fixos_detalhada %}
+                        <tr>
+                            <td>
+                                <div class="fw-bold text-dark">
+                                    {{ item.nome }}
+                                    {% if item.eh_cartao %}
+                                        <span class="badge bg-warning text-dark" style="font-size: 0.7em" title="Cobrado na Fatura">💳 Cartão</span>
+                                    {% endif %}
+                                </div>
+                                
+                                {% if item.status == 'pago' %}
+                                    <small class="text-success fw-bold">Pago!</small>
+                                {% else %}
+                                    {% if eh_passado %}
+                                        <small class="text-danger fw-bold">Não pago</small>
+                                    {% else %}
+                                        <small class="text-muted">Vence dia {{ item.dia }}</small>
+                                    {% endif %}
+                                {% endif %}
+                            </td>
+                            
+                            <td class="text-end">
+                                {% if item.status == 'pago' %}
+                                    <div class="text-success fw-bold">R$ {{ item.valor_pago }} ✅</div>
+                                {% else %}
+                                    {% if eh_passado %}
+                                        <span class="text-danger fw-bold"> Pendente </span>
+                                    {% else %}
+                                        
+                                        {% if item.eh_cartao %}
+                                            <div class="d-flex flex-column align-items-end">
+                                                <span class="fw-bold text-muted">R$ {{ item.valor_previsto }}</span>
+                                                <span class="badge bg-warning text-dark border" style="font-size: 0.7em">
+                                                    No Cartão 🔒
+                                                </span>
+                                            </div>
+                                        {% else %}
+                                            <div class="mb-1 fw-bold text-dark">R$ {{ item.valor_previsto }}</div>
+                                            <a href="{% url 'pagar_gasto_fixo' item.id %}?mes={{ data_ref.month }}&ano={{ data_ref.year }}" 
+                                            class="btn btn-sm btn-outline-success rounded-pill px-3 py-0" style="font-size: 0.85rem;">
+                                            Pagar
+                                            </a>
+                                        {% endif %}
+
+                                    {% endif %}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="2" class="text-muted text-center py-4">Nenhuma conta fixa cadastrada.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card card-custom p-4 h-100 shadow-sm">
+            
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h5 class="fw-bold mb-1">💳 Fatura {% if eh_passado %}Fechada{% else %}Estimada{% endif %}</h5>
+                    <p class="text-muted small mb-3">Vencimento em <strong>{{ data_ref|date:"F" }}</strong></p>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#modalFatura">
+                    👁️ Ver Itens
+                </button>
+            </div>
+            
+            {% if fatura_paga %}
+                <div class="alert alert-success text-center py-4 mb-0">
+                    <h1 class="display-4 mb-0">✅</h1>
+                    <h3 class="fw-bold text-success">Fatura Paga!</h3>
+                    <p class="mb-0">Total quitado: <strong>R$ {{ total_cartao|floatformat:2 }}</strong></p>
+                </div>
+
+            {% else %}
+                <div class="alert alert-warning text-center">
+                    <h2 class="fw-bold m-0 text-dark">R$ {{ total_cartao|floatformat:2 }}</h2>
+                    <small>Total Somado</small>
+                </div>
+                
+                {% if not eh_passado and total_cartao > 0 %}
+                    <a href="{% url 'pagar_fatura_mensal' %}?mes={{ data_ref.month }}&ano={{ data_ref.year }}" 
+                       class="btn btn-dark w-100 mb-2"
+                       onclick="return confirm('Confirmar pagamento de R$ {{ total_cartao }}? O valor será descontado do seu saldo.')">
+                       ✅ Pagar Fatura Agora
+                    </a>
+                {% endif %}
+            {% endif %}
+
+            {% if not fatura_paga %}
+                <a href="{% url 'gerenciar_cartoes' %}" class="btn btn-sm btn-outline-secondary w-100 mt-auto">Gerenciar Cartões</a>
+            {% endif %}
         </div>
     </div>
 </div>
 
-<div class="card card-custom p-4">
-    <h5>📅 Próximos Pagamentos</h5>
-    <table class="table mt-3">
-        <thead><tr><th>O que</th><th>Vencimento</th><th>Valor</th></tr></thead>
-        <tbody>
-            {% for conta in proximas_contas %}
-            <tr>
-                <td>Parcela {{ conta.numero_parcela }} - {{ conta.transacao.descricao }}</td>
-                <td>{{ conta.data_vencimento|date:"d/m/Y" }}</td>
-                <td class="fw-bold text-danger">R$ {{ conta.valor }}</td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="3">Nenhuma conta próxima!</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
 {% endblock %}

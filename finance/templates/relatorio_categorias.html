@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12 text-center">
+        <h2 class="fw-bold">🍕 Onde estou gastando?</h2>
+        <p class="text-muted">Visão acumulada de <strong>{{ mes }}/{{ ano }}</strong> (Cartão + Débito)</p>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card card-custom p-4 shadow-sm">
+            <canvas id="graficoPizza"></canvas>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card card-custom p-4 shadow-sm h-100">
+            <h5 class="fw-bold mb-3">Detalhes</h5>
+            <ul class="list-group list-group-flush">
+                {% for label in labels %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        {{ label }}
+                        </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const ctx = document.getElementById('graficoPizza');
+    new Chart(ctx, {
+        type: 'doughnut', // Pizza com furo no meio (mais moderno)
+        data: {
+            labels: {{ labels|safe }},
+            datasets: [{
+                data: {{ data|safe }},
+                backgroundColor: [
+                    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#c9cbcf'
+                ],
+                borderWidth: 1
+            }]
+        }
+    });
+</script>
+{% endblock %}

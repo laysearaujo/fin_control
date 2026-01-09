@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-3">
+        <div class="card card-custom p-4 bg-white mb-3">
+            <h5 class="fw-bold mb-3">🔮 Simulador</h5>
+            <p class="small text-muted">Quer comprar algo parcelado? Teste aqui antes.</p>
+            
+            <form method="POST">
+                {% csrf_token %}
+                {{ form.as_p }}
+                <button type="submit" class="btn btn-warning w-100 fw-bold">Simular Impacto</button>
+            </form>
+            
+            {% if simulacao_ativa %}
+            <a href="." class="btn btn-outline-secondary w-100 mt-2">Limpar Simulação</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="col-md-9">
+        <div class="card card-custom p-4 bg-white mb-4">
+            <h4 class="fw-bold">Fluxo de Caixa: Próximos 12 Meses</h4>
+            <canvas id="graficoAnual" height="120"></canvas>
+        </div>
+        
+        <div class="table-responsive">
+            <table class="table table-hover bg-white card-custom">
+                <thead class="bg-light">
+                    <tr>
+                        <th>Mês</th>
+                        <th>Receita</th>
+                        <th>Já Comprometido</th>
+                        {% if simulacao_ativa %}<th>+ Simulação</th>{% endif %}
+                        <th>Saldo Final</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in tabela %}
+                    <tr class="{% if item.alerta %}table-danger{% endif %}">
+                        <td class="fw-bold">{{ item.mes_nome }}</td>
+                        <td class="text-success">R$ {{ item.receita }}</td>
+                        <td>R$ {{ item.comprometido_real }}</td>
+                        {% if simulacao_ativa %}
+                        <td class="text-warning fw-bold">+ R$ {{ item.simulacao|floatformat:2 }}</td>
+                        {% endif %}
+                        <td class="fw-bold {% if item.saldo < 0 %}text-danger{% else %}text-primary{% endif %}">
+                            R$ {{ item.saldo|floatformat:2 }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const ctx = document.getElementById('graficoAnual');
+    
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: {{ labels|safe }},
+            datasets: [
+                {
+                    label: 'Sua Renda',
+                    data: {{ data_receita|safe }},
+                    type: 'line', // Linha passando por cima
+                    borderColor: '#2ecc71',
+                    borderWidth: 3,
+                    fill: false,
+                    tension: 0.4
+                },
+                {
+                    label: 'Simulação (Novo Gasto)',
+                    data: {{ data_simulacao|safe }},
+                    backgroundColor: '#f1c40f', // Laranja/Amarelo
+                    stack: 'gastos' // Empilha com o de baixo
+                },
+                {
+                    label: 'Já Comprometido (Fixos + Fatura)',
+                    data: {{ data_real|safe }},
+                    backgroundColor: '#e74c3c', // Vermelho
+                    stack: 'gastos'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: { stacked: true },
+                y: { stacked: true }
+            }
+        }
+    });
+</script>
+{% endblock %}

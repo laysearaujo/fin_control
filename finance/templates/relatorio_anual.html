@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="text-center mb-5">
+    <h2 class="fw-bold">🗓️ Visão Anual {{ ano }}</h2>
+    <p class="text-muted">Verde: Saldo Positivo | Vermelho: Saldo Negativo</p>
+</div>
+
+<div class="row g-4">
+    {% for m in grid %}
+    <div class="col-6 col-md-4 col-lg-3">
+        <div class="card h-100 shadow-sm text-center p-3 border-0" 
+             style="background-color: {% if m.saldo >= 0 %}#d1e7dd{% else %}#f8d7da{% endif %};">
+            
+            <div class="card-body">
+                <h5 class="fw-bold text-uppercase mb-3" style="color: {% if m.saldo >= 0 %}#0f5132{% else %}#842029{% endif %};">
+                    {{ m.mes_num }} - {{ m.mes_nome }}
+                </h5>
+
+                {% if m.passado %}
+                    <span class="badge bg-secondary mb-2">Histórico</span>
+                {% else %}
+                    <span class="badge bg-primary mb-2">Previsão</span>
+                {% endif %}
+
+                <h3 class="fw-bold mt-2" style="color: {% if m.saldo >= 0 %}#0f5132{% else %}#842029{% endif %};">
+                    R$ {{ m.saldo|floatformat:0 }}
+                </h3>
+                
+                <a href="{% url 'dashboard' %}?mes={{ m.mes_num }}&ano={{ ano }}" class="btn btn-sm btn-light mt-3 stretched-link opacity-75">
+                    Ver Detalhes
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

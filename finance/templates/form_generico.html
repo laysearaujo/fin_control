@@ -3,25 +3,72 @@
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-md-6">
-        <div class="card card-custom p-5">
+        <div class="card card-custom p-5 shadow-lg">
             <h3 class="fw-bold mb-4 text-center">{{ titulo }}</h3>
             
             <form method="POST">
                 {% csrf_token %}
+                
                 {% for field in form %}
-                <div class="mb-3">
-                    <label class="form-label fw-bold text-muted small">{{ field.label }}</label>
-                    {{ field }}
-                    {% if field.help_text %}
-                        <small class="text-muted">{{ field.help_text }}</small>
-                    {% endif %}
-                </div>
+                
+                {% if field.name == 'eh_cartao' %}
+                    <div class="mb-3 form-check form-switch p-3 bg-light rounded border">
+                        {{ field }}
+                        <label class="form-check-label fw-bold ms-2" for="{{ field.id_for_label }}">
+                            {{ field.label }}
+                        </label>
+                        <div class="small text-muted">Marque para parcelar ou lançar na fatura.</div>
+                    </div>
+                
+                {% else %}
+                    <div class="mb-3" id="div_{{ field.name }}"> 
+                        <label class="form-label fw-bold text-muted small">{{ field.label }}</label>
+                        {{ field }}
+                        {% if field.help_text %}
+                            <small class="text-muted">{{ field.help_text }}</small>
+                        {% endif %}
+                        {% if field.errors %}
+                            <div class="text-danger small">{{ field.errors }}</div>
+                        {% endif %}
+                    </div>
+                {% endif %}
+                
                 {% endfor %}
 
-                <button type="submit" class="btn btn-dark w-100 btn-lg mt-3">Salvar</button>
+                <button type="submit" class="btn btn-dark w-100 btn-lg mt-3">Salvar Lançamento</button>
                 <a href="javascript:history.back()" class="btn btn-link w-100 mt-2 text-decoration-none text-muted">Cancelar</a>
             </form>
         </div>
     </div>
 </div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const checkbox = document.getElementById('check_cartao');
+        
+        // Pega os containers dos campos que queremos esconder/mostrar
+        const divCartao = document.getElementById('div_cartao');
+        const divParcelas = document.getElementById('div_qtd_parcelas');
+
+        if (checkbox) {
+            function toggleCampos() {
+                if (checkbox.checked) {
+                    // Se marcou: Mostra Cartão e Parcelas
+                    if(divCartao) divCartao.style.display = 'block';
+                    if(divParcelas) divParcelas.style.display = 'block';
+                } else {
+                    // Se desmarcou: Esconde tudo
+                    if(divCartao) divCartao.style.display = 'none';
+                    if(divParcelas) divParcelas.style.display = 'none';
+                }
+            }
+
+            // Executa ao carregar a página (caso esteja editando)
+            toggleCampos();
+
+            // Executa sempre que clicar no switch
+            checkbox.addEventListener('change', toggleCampos);
+        }
+    });
+</script>
 {% endblock %}

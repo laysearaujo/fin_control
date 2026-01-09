@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold">🐖 Minhas Caixinhas</h2>
+        <p class="text-muted">Patrimônio Total Guardado: <strong class="text-success">R$ {{ total|floatformat:2 }}</strong></p>
+    </div>
+    <div>
+        <a href="{% url 'novo_emprestimo_proprio' %}" class="btn btn-warning me-2">💸 Auto-Empréstimo</a>
+        <a href="{% url 'nova_caixinha' %}" class="btn btn-success">+ Nova Caixinha</a>
+    </div>
+</div>
+
+<div class="row">
+    {% for box in caixinhas %}
+    <div class="col-md-4">
+        <div class="card card-custom p-4 mb-3 h-100 shadow-sm border-start border-4 border-success">
+            <div class="d-flex justify-content-between">
+                <h5 class="fw-bold">{{ box.nome }}</h5>
+                <span class="badge bg-light text-dark border">{{ box.meta_cdi }}% do CDI</span>
+            </div>
+            
+            <h2 class="text-dark fw-bold my-3">R$ {{ box.saldo_atual|floatformat:2 }}</h2>
+            
+            <div class="bg-light p-2 rounded mb-3 small">
+                <span class="text-muted">Rendimento estimado:</span>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>Em 30 dias:</span>
+                    <strong class="text-success">R$ {{ box.projecao_mes_seguinte|floatformat:2 }} 📈</strong>
+                </div>
+            </div>
+
+            <form method="POST" class="mt-auto">
+                {% csrf_token %}
+                <input type="hidden" name="caixinha_id" value="{{ box.id }}">
+                <input type="hidden" name="atualizar_saldo" value="true">
+                
+                <label class="small text-muted mb-1">Atualizar valor hoje:</label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text">R$</span>
+                    <input type="number" step="0.01" name="novo_valor" class="form-control" placeholder="{{ box.saldo_atual|stringformat:'.2f' }}">
+                    <button type="submit" class="btn btn-outline-primary">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-12 text-center py-5">
+        <h4 class="text-muted">Nenhuma caixinha criada ainda.</h4>
+        <p class="text-muted">Crie sua Reserva de Emergência ou meta de viagem.</p>
+        <a href="{% url 'nova_caixinha' %}" class="btn btn-outline-success mt-3">Começar a Guardar</a>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
