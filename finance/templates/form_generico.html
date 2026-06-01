@@ -3,39 +3,38 @@
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-md-6">
-        <div class="card card-custom p-5 shadow-lg">
-            <h3 class="fw-bold mb-4 text-center">{{ titulo }}</h3>
+        <div class="card card-custom p-5 shadow-lg border-0 rounded-4 mb-5">
+            <h3 class="fw-bold mb-4 text-center text-dark">{{ titulo }}</h3>
             
-            <form method="POST">
+            <form method="POST" id="formGenerico">
                 {% csrf_token %}
                 
-                {% for field in form %}
-                
-                {% if field.name == 'eh_cartao' %}
-                    <div class="mb-3 form-check form-switch p-3 bg-light rounded border">
-                        {{ field }}
-                        <label class="form-check-label fw-bold ms-2" for="{{ field.id_for_label }}">
-                            {{ field.label }}
+                {% if form.eh_cartao %}
+                    <div class="mb-4 form-check form-switch p-3 rounded-3" style="background-color: #f8f9fa; border: 2px solid #e9ecef;">
+                        {{ form.eh_cartao }}
+                        <label class="form-check-label fw-bold text-primary ms-2" style="font-size: 1.1rem; cursor: pointer;" for="{{ form.eh_cartao.id_for_label }}">
+                            💳 Pagar com Cartão de Crédito?
                         </label>
-                        <div class="small text-muted">Marque para parcelar ou lançar na fatura.</div>
-                    </div>
-                
-                {% else %}
-                    <div class="mb-3" id="div_{{ field.name }}"> 
-                        <label class="form-label fw-bold text-muted small">{{ field.label }}</label>
-                        {{ field }}
-                        {% if field.help_text %}
-                            <small class="text-muted">{{ field.help_text }}</small>
-                        {% endif %}
-                        {% if field.errors %}
-                            <div class="text-danger small">{{ field.errors }}</div>
-                        {% endif %}
+                        <div class="small text-muted mt-1 ms-2">Ative para escolher parcelas e lançar na fatura.</div>
                     </div>
                 {% endif %}
                 
+                {% for field in form %}
+                    {% if field.name != 'eh_cartao' %}
+                        <div class="mb-3" id="div_{{ field.name }}"> 
+                            <label class="form-label fw-bold text-muted small text-uppercase" id="label_{{ field.name }}">{{ field.label }}</label>
+                            {{ field }}
+                            {% if field.help_text %}
+                                <small class="text-muted">{{ field.help_text }}</small>
+                            {% endif %}
+                            {% if field.errors %}
+                                <div class="text-danger small fw-bold">{{ field.errors }}</div>
+                            {% endif %}
+                        </div>
+                    {% endif %}
                 {% endfor %}
 
-                <button type="submit" class="btn btn-dark w-100 btn-lg mt-3">Salvar Lançamento</button>
+                <button type="submit" class="btn btn-dark w-100 btn-lg mt-4 rounded-pill fw-bold shadow-sm">Salvar Lançamento</button>
                 <a href="javascript:history.back()" class="btn btn-link w-100 mt-2 text-decoration-none text-muted">Cancelar</a>
             </form>
         </div>
@@ -44,30 +43,110 @@
 
 <script>
     document.addEventListener("DOMContentLoaded", function() {
-        const checkbox = document.getElementById('check_cartao');
-        
-        // Pega os containers dos campos que queremos esconder/mostrar
+        const checkbox = document.getElementById('check_cartao') || document.getElementById('id_eh_cartao');
         const divCartao = document.getElementById('div_cartao');
         const divParcelas = document.getElementById('div_qtd_parcelas');
+        
+        const inputValor = document.getElementById('id_valor_total');
+        const inputParcelas = document.getElementById('id_qtd_parcelas');
+        const form = document.getElementById('formGenerico');
 
         if (checkbox) {
-            function toggleCampos() {
-                if (checkbox.checked) {
-                    // Se marcou: Mostra Cartão e Parcelas
-                    if(divCartao) divCartao.style.display = 'block';
-                    if(divParcelas) divParcelas.style.display = 'block';
-                } else {
-                    // Se desmarcou: Esconde tudo
-                    if(divCartao) divCartao.style.display = 'none';
-                    if(divParcelas) divParcelas.style.display = 'none';
+            // Arruma o visual do botão (tira a barra gigante do Django)
+            checkbox.classList.remove("form-control", "form-control-lg");
+            checkbox.style.width = "2.8em";
+            checkbox.style.height = "1.5em";
+            checkbox.style.cursor = "pointer";
+
+            // VARIÁVEIS PARA A LÓGICA DE VALOR x PARCELA
+            let labelValor = null;
+            let avisoTotal = null;
+            let isParcelado = false;
+
+            // Só ativa a matemática se for a tela de "Nova Despesa" (que tem Valor e Parcelas)
+            if (inputValor && inputParcelas) {
+                labelValor = document.getElementById('label_valor_total');
+                
+                // Cria a mensagem verdinha que vai mostrar o Total da compra
+                avisoTotal = document.createElement('div');
+                avisoTotal.className = 'text-success fw-bold small mt-1 py-1 px-2 bg-success bg-opacity-10 rounded border border-success';
+                avisoTotal.style.display = 'none';
+                inputValor.parentNode.appendChild(avisoTotal);
+
+                // TRUQUE PARA EDIÇÃO: Se você clicar em Editar no Extrato e a compra for parcelada, 
+                // ele divide o Total que veio do banco de dados para mostrar a parcela na tela!
+                if (checkbox.checked && parseInt(inputParcelas.value) > 1 && parseFloat(inputValor.value.replace(',', '.')) > 0) {
+                    let totalDoBanco = parseFloat(inputValor.value.replace(',', '.'));
+                    let qtd = parseInt(inputParcelas.value);
+                    inputValor.value = (totalDoBanco / qtd).toFixed(2);
                 }
             }
 
-            // Executa ao carregar a página (caso esteja editando)
-            toggleCampos();
+            // FUNÇÃO: Muda os textos e calcula as coisas em tempo real
+            function atualizarTextos() {
+                if (!inputValor || !inputParcelas) return;
+                
+                let qtd = parseInt(inputParcelas.value) || 1;
+                let valorDigitado = parseFloat(inputValor.value.replace(',', '.')) || 0;
+                
+                if (checkbox.checked) {
+                    // SE LIGOU O CARTÃO:
+                    if (labelValor) labelValor.innerText = "VALOR DA PARCELA (R$)";
+                    isParcelado = true;
+                    
+                    if (qtd > 1) {
+                        avisoTotal.style.display = 'block';
+                        avisoTotal.innerText = "💰 Total calculado da compra: R$ " + (valorDigitado * qtd).toFixed(2);
+                    } else {
+                        avisoTotal.style.display = 'none';
+                    }
+                } else {
+                    // SE DESLIGOU O CARTÃO (PIX/Débito):
+                    if (labelValor) labelValor.innerText = "VALOR TOTAL (R$)";
+                    isParcelado = false;
+                    if (avisoTotal) avisoTotal.style.display = 'none';
+                }
+            }
 
-            // Executa sempre que clicar no switch
+            // FUNÇÃO: Mostra/Esconde os campos dependendo se o botão tá ligado
+            function toggleCampos() {
+                if (checkbox.checked) {
+                    if (divCartao) divCartao.style.display = 'block';
+                    if (divParcelas) divParcelas.style.display = 'block';
+                } else {
+                    if (divCartao) divCartao.style.display = 'none';
+                    if (divParcelas) divParcelas.style.display = 'none';
+                    
+                    // Reseta para não dar erro no banco
+                    if (inputParcelas) inputParcelas.value = 1; 
+                    const selectCartao = document.getElementById('id_cartao');
+                    if (selectCartao) selectCartao.value = "";
+                }
+                atualizarTextos();
+            }
+
+            // Roda as funções no início
+            toggleCampos();
+            
+            // Ativa a "escuta" (sempre que mexer num campo, ele recalcula)
             checkbox.addEventListener('change', toggleCampos);
+            if (inputValor && inputParcelas) {
+                inputValor.addEventListener('input', atualizarTextos);
+                inputParcelas.addEventListener('input', atualizarTextos);
+                
+                // =======================================================
+                // A GRANDE MÁGICA: Antes de salvar, multiplica a parcela 
+                // pela quantidade para enviar o Total correto pro servidor!
+                // =======================================================
+                form.addEventListener('submit', function() {
+                    if (isParcelado && checkbox.checked) {
+                        let valorParcela = parseFloat(inputValor.value.replace(',', '.')) || 0;
+                        let qtd = parseInt(inputParcelas.value) || 1;
+                        // Sobrescreve o campo com o Total antes de enviar a página
+                        inputValor.value = (valorParcela * qtd).toFixed(2);
+                    }
+                });
+            }
         }
     });
 </script>

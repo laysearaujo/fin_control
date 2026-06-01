@@ -3,7 +3,12 @@ from django.db.models import Sum
 from django.utils import timezone
 from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
-from .models import Parcela, Receita, GastoFixo, Transacao, Categoria, CartaoCredito, ReceitaFixa, Caixinha, EmprestimoProprio, ContaAvulsa
+from decimal import Decimal
+
+from .models import (
+    Parcela, Receita, GastoFixo, Transacao, Categoria, 
+    CartaoCredito, ReceitaFixa, Caixinha, EmprestimoProprio, ContaAvulsa
+)
 from .forms import (
     TransacaoForm, ReceitaForm, CartaoForm, CategoriaForm, 
     GastoFixoForm, SimulacaoForm, ReceitaFixaForm,
@@ -27,9 +32,25 @@ def dashboard(request):
     ano_url = request.GET.get('ano')
     data_hoje = timezone.now().date()
     
-    if mes_url and ano_url:
-        data_ref = date(int(ano_url), int(mes_url), 1)
-    else:
+    try:
+        if mes_url and ano_url:
+            mes_int = int(mes_url)
+            ano_int = int(ano_url)
+            
+            # Correção automática para virada de ano (Mês 13 vira 1 do ano seguinte, Mês 0 vira 12 do ano anterior)
+            if mes_int > 12:
+                mes_int = 1
+                ano_int += 1
+            elif mes_int < 1:
+                mes_int = 12
+                ano_int -= 1
+                
+            data_ref = date(ano_int, mes_int, 1)
+        else:
+            data_ref = date(data_hoje.year, data_hoje.month, 1)
+            
+    except (ValueError, TypeError):
+        # Se vier texto ou vazio na URL, protege o sistema carregando o mês atual
         data_ref = date(data_hoje.year, data_hoje.month, 1)
 
     mes_anterior = data_ref - relativedelta(months=1)
@@ -138,23 +159,23 @@ def dashboard(request):
 
     total_cartao_mes = soma_parcelas + soma_assinaturas_cartao
 
-    # Totais Previstos
+    # A previsão base é apenas o seu Salário Fixo
     receita_fixa_total = ReceitaFixa.objects.aggregate(Sum('valor'))['valor__sum'] or 0
-    receita_variavel_total = Receita.objects.filter(data__month=data_ref.month, data__year=data_ref.year).aggregate(Sum('valor'))['valor__sum'] or 0
-    total_receitas_previsto = receita_fixa_total + receita_variavel_total
+    total_receitas_previsto = receita_fixa_total 
     
-    # Reais
+    # 1. Receitas Reais (Busca APENAS o que foi realmente recebido e salvo no banco)
     receitas_reais_mes = Receita.objects.filter(data__month=data_ref.month, data__year=data_ref.year).aggregate(Sum('valor'))['valor__sum'] or 0
-    if eh_corrente:
-        for r_fixa in ReceitaFixa.objects.all():
-            if data_hoje.day >= r_fixa.dia_recebimento:
-                if not Receita.objects.filter(descricao=r_fixa.descricao, data__month=data_hoje.month, data__year=data_hoje.year).exists():
-                    receitas_reais_mes += r_fixa.valor
-    elif eh_passado:
-        receitas_reais_mes += ReceitaFixa.objects.aggregate(Sum('valor'))['valor__sum'] or 0
-
+    
+    # 2. Saídas Reais 
     saidas_reais_mes = Transacao.objects.filter(eh_cartao=False, data_compra__month=data_ref.month, data_compra__year=data_ref.year).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
     
+    # Ajusta a projeção caso você ganhe um dinheiro extra no mês (além do fixo)
+    falta_entrar = total_receitas_previsto - receitas_reais_mes
+    if falta_entrar < 0: 
+        falta_entrar = 0 
+        total_receitas_previsto = receitas_reais_mes # O previsto se ajusta à realidade positiva
+    
+    # 3. Calcula o Fechamento
     if eh_futuro:
         saldo_real_atual = saldo_anterior 
     else:
@@ -381,12 +402,32 @@ def nova_transacao(request):
     return render(request, 'form_generico.html', {'form': form, 'titulo': '💸 Nova Despesa'})
 
 def nova_receita(request):
-    """Para receitas variáveis (freelas, vendas, bônus)"""
-    form = ReceitaForm(request.POST or None)
+    """Cria receitas avulsas ou dá baixa automática em Receitas Fixas"""
+    
+    # Verifica se a URL enviou o ID de um salário/receita fixa
+    fixa_id = request.GET.get('fixa_id')
+    dados_iniciais = {}
+    
+    if fixa_id:
+        try:
+            fixa = ReceitaFixa.objects.get(id=fixa_id)
+            # Preenche automaticamente com os dados do planejamento
+            dados_iniciais = {
+                'descricao': fixa.descricao,
+                'valor': fixa.valor,
+                'data': timezone.now().date() # Já coloca a data de hoje!
+            }
+        except ReceitaFixa.DoesNotExist:
+            pass
+
+    # Carrega o formulário já com os dados preenchidos (se houver)
+    form = ReceitaForm(request.POST or None, initial=dados_iniciais)
+    
     if form.is_valid():
         form.save()
         return redirect('dashboard')
-    return render(request, 'form_generico.html', {'form': form, 'titulo': '💰 Nova Entrada Extra'})
+        
+    return render(request, 'form_generico.html', {'form': form, 'titulo': '💰 Registrar Entrada'})
 
 # --- 4. GERENCIAMENTO DE CARTÕES ---
 
@@ -404,8 +445,70 @@ def novo_cartao(request):
 # --- 5. GERENCIAMENTO DE CATEGORIAS ---
 
 def gerenciar_categorias(request):
+    mes_atual = timezone.now().month
+    ano_atual = timezone.now().year
+
+    # 1. Resumo do Planejamento
+    renda_fixa_total = ReceitaFixa.objects.aggregate(Sum('valor'))['valor__sum'] or 0
     categorias = Categoria.objects.all()
-    return render(request, 'lista_categorias.html', {'categorias': categorias})
+    total_planejado = categorias.aggregate(Sum('teto_mensal'))['teto_mensal__sum'] or 0
+    sobra_prevista = renda_fixa_total - total_planejado
+
+    # 2. Detalhamento por Categoria (Gasto e Sobra Real)
+    categorias_com_detalhes = []
+    for cat in categorias:
+        # Soma o que já foi gasto nesta categoria no mês atual (Débito + Cartão)
+        gasto_debito = Transacao.objects.filter(categoria=cat, eh_cartao=False, data_compra__month=mes_atual, data_compra__year=ano_atual).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
+        gasto_cartao = Parcela.objects.filter(transacao__categoria=cat, data_vencimento__month=mes_atual, data_vencimento__year=ano_atual).aggregate(Sum('valor'))['valor__sum'] or 0
+        
+        gasto_total = gasto_debito + gasto_cartao
+        sobra = cat.teto_mensal - gasto_total
+
+        categorias_com_detalhes.append({
+            'id': cat.id,
+            'nome': cat.nome,
+            'teto_mensal': cat.teto_mensal,
+            'gasto_total': gasto_total,
+            'sobra': sobra if sobra > 0 else 0
+        })
+
+    # Puxa as caixinhas para o Modal de guardar dinheiro
+    caixinhas = Caixinha.objects.all()
+
+    context = {
+        'categorias': categorias_com_detalhes,
+        'renda_fixa_total': renda_fixa_total,
+        'total_planejado': total_planejado,
+        'sobra_prevista': sobra_prevista,
+        'caixinhas': caixinhas
+    }
+    return render(request, 'lista_categorias.html', context)
+
+
+def guardar_sobra(request):
+    """Função que tira o dinheiro do saldo livre e joga na caixinha"""
+    if request.method == 'POST':
+        categoria_id = request.POST.get('categoria_id')
+        caixinha_id = request.POST.get('caixinha_id')
+        valor = Decimal(request.POST.get('valor').replace(',', '.'))
+        
+        categoria = get_object_or_404(Categoria, id=categoria_id)
+        caixinha = get_object_or_404(Caixinha, id=caixinha_id)
+        
+        # 1. Cria uma despesa para "tirar" o dinheiro do saldo do mês
+        Transacao.objects.create(
+            descricao=f"Sobra Guardada: {categoria.nome}",
+            valor_total=valor,
+            data_compra=timezone.now().date(),
+            categoria=categoria, # Vincula a categoria para "zerar" a sobra na tabela
+            eh_cartao=False
+        )
+        
+        # 2. Adiciona o dinheiro na Caixinha escolhida
+        caixinha.saldo_atual += valor
+        caixinha.save()
+        
+    return redirect('gerenciar_categorias')
 
 def nova_categoria(request):
     form = CategoriaForm(request.POST or None)
@@ -413,6 +516,20 @@ def nova_categoria(request):
         form.save()
         return redirect('gerenciar_categorias')
     return render(request, 'form_generico.html', {'form': form, 'titulo': '📂 Nova Categoria'})
+
+def editar_categoria(request, id):
+    categoria = get_object_or_404(Categoria, id=id)
+    # O "instance=categoria" carrega os dados atuais no formulário
+    form = CategoriaForm(request.POST or None, instance=categoria)
+    
+    if form.is_valid():
+        form.save()
+        return redirect('gerenciar_categorias')
+        
+    return render(request, 'form_generico.html', {
+        'form': form, 
+        'titulo': f'✏️ Editar Categoria: {categoria.nome}'
+    })
 
 # --- 6. GERENCIAMENTO DE GASTOS FIXOS (ALUGUEL/LUZ) ---
 
@@ -444,6 +561,27 @@ def nova_receita_fixa(request):
         form.save()
         return redirect('gerenciar_receitas_fixas')
     return render(request, 'form_generico.html', {'form': form, 'titulo': '💰 Novo Salário Fixo'})
+
+def editar_receita(request, id):
+    # Busca a receita pelo ID
+    receita = get_object_or_404(Receita, id=id)
+    
+    if request.method == 'POST':
+        # Atualiza os dados vindos do Modal
+        receita.descricao = request.POST.get('descricao')
+        receita.valor = request.POST.get('valor')
+        
+        # Converte a data texto para objeto data
+        nova_data = request.POST.get('data')
+        receita.data = datetime.strptime(nova_data, '%Y-%m-%d').date()
+        
+        receita.save()
+        
+        # Redireciona para o mês da receita (para você ver a alteração)
+        return redirect(f'/?mes={receita.data.month}&ano={receita.data.year}')
+    
+    # Se tentar acessar direto pelo navegador sem ser POST, volta pra home
+    return redirect('/')
 
 def apagar_receita_fixa(request, id):
     item = get_object_or_404(ReceitaFixa, id=id)
@@ -524,6 +662,41 @@ def extrato(request):
 
     return render(request, 'extrato.html', {'transacoes': movimentacoes})
 
+def editar_transacao(request, id):
+    transacao = get_object_or_404(Transacao, id=id)
+    
+    if request.method == 'POST':
+        form = TransacaoForm(request.POST, instance=transacao)
+        if form.is_valid():
+            transacao_salva = form.save()
+            
+            # Se for uma compra no cartão, precisamos recriar as parcelas
+            if transacao_salva.eh_cartao:
+                # 1. Apaga as parcelas antigas vinculadas a esta transação
+                Parcela.objects.filter(transacao=transacao_salva).delete()
+                
+                # 2. Calcula o novo valor de cada parcela
+                valor_parcela = transacao_salva.valor_total / transacao_salva.qtd_parcelas
+                
+                # 3. Cria as novas parcelas
+                for i in range(transacao_salva.qtd_parcelas):
+                    Parcela.objects.create(
+                        transacao=transacao_salva,
+                        numero_parcela=i + 1,
+                        valor=valor_parcela,
+                        # A data de vencimento avança 1 mês para cada parcela
+                        data_vencimento=transacao_salva.data_compra + relativedelta(months=i)
+                    )
+            
+            return redirect('extrato')
+    else:
+        form = TransacaoForm(instance=transacao)
+        
+    return render(request, 'form_generico.html', {
+        'form': form, 
+        'titulo': f'✏️ Editar Transação: {transacao.descricao}'
+    })
+
 def apagar_transacao(request, id):
     """Permite excluir um lançamento errado"""
     transacao = get_object_or_404(Transacao, id=id)
@@ -603,8 +776,8 @@ def relatorio_anual(request):
             # Então para simplificar o passado: Receita Real - Saída Real
             receitas_reais = Receita.objects.filter(data__month=i, data__year=ano).aggregate(Sum('valor'))['valor__sum'] or 0 
             # (Adicione salários fixos ao passado se quiser precisão histórica, mas vamos simplificar)
+            saldo = receitas_reais - (avulsos + parcelas) # Agora puxa apenas a realidade do banco
             
-            saldo = (receita_fixa_total + receitas_reais) - (avulsos + parcelas) # Aproximação
         else:
             # Futuro: Previsão
             # Avulsos futuros não existem ainda, então usamos Fixos + Parcelas
@@ -663,23 +836,38 @@ def pagar_fatura_mensal(request):
 def adicionar_conta_avulsa(request):
     if request.method == 'POST':
         titulo = request.POST.get('titulo')
-        valor = request.POST.get('valor')
+        # Troca a vírgula por ponto para evitar erros ao salvar
+        valor = request.POST.get('valor').replace(',', '.')
         data_venc = request.POST.get('data_vencimento')
-        categoria_id = request.POST.get('categoria_id') # Pega o ID do HTML
+        categoria_id = request.POST.get('categoria_id')
+        
+        # Pega a quantidade de meses (se não vier nada, padrão é 1)
+        qtd_meses = int(request.POST.get('qtd_meses', 1)) 
         
         # Busca o objeto categoria no banco
         categoria_obj = None
         if categoria_id:
             categoria_obj = Categoria.objects.get(id=categoria_id)
 
-        ContaAvulsa.objects.create(
-            titulo=titulo,
-            valor=valor,
-            data_vencimento=data_venc,
-            categoria=categoria_obj # Salva aqui
-        )
-        
         data_obj = datetime.strptime(data_venc, '%Y-%m-%d').date()
+
+        # O MÁGICO AQUI: Cria uma conta para cada mês
+        for i in range(qtd_meses):
+            # Avança o mês a cada repetição
+            data_parcela = data_obj + relativedelta(months=i)
+            
+            # Adiciona o (1/3), (2/3) no nome se for parcelado
+            titulo_parcela = titulo
+            if qtd_meses > 1:
+                titulo_parcela = f"{titulo} ({i+1}/{qtd_meses})"
+
+            ContaAvulsa.objects.create(
+                titulo=titulo_parcela,
+                valor=valor,
+                data_vencimento=data_parcela,
+                categoria=categoria_obj
+            )
+            
         return redirect(f'/?mes={data_obj.month}&ano={data_obj.year}')
     
     return redirect('/')
@@ -742,3 +930,35 @@ def editar_conta_avulsa(request, id):
         return redirect(f'/?mes={conta.data_vencimento.month}&ano={conta.data_vencimento.year}')
     
     return redirect('/')
+
+def editar_gasto_fixo(request, id):
+    fixo = GastoFixo.objects.get(id=id)
+    
+    if request.method == 'POST':
+        fixo.nome = request.POST.get('nome')
+        fixo.valor_previsto = request.POST.get('valor')
+        fixo.dia_vencimento = request.POST.get('dia_vencimento')
+        
+        # Tenta pegar a categoria se ela existir no seu modelo de GastoFixo
+        cat_id = request.POST.get('categoria_id')
+        if cat_id:
+             # Se seu modelo GastoFixo tiver o campo categoria, descomente a linha abaixo:
+             # fixo.categoria_id = cat_id
+             pass 
+
+        fixo.save()
+        
+        # Redireciona de volta para a dashboard
+        return redirect('/')
+    
+    return redirect('/')
+
+def excluir_gasto_fixo(request, id):
+    fixo = GastoFixo.objects.get(id=id)
+    fixo.delete()
+    return redirect('/')
+
+def excluir_receita(request, id):
+    receita = Receita.objects.get(id=id)
+    receita.delete()
+    return redirect(request.META.get('HTTP_REFERER', '/'))

@@ -8,6 +8,7 @@ urlpatterns = [
     # --- DASHBOARD E EXTRATO ---
     path('', views.dashboard, name='dashboard'),
     path('extrato/', views.extrato, name='extrato'),
+    path('extrato/editar/<int:id>/', views.editar_transacao, name='editar_transacao'),
     path('transacao/apagar/<int:id>/', views.apagar_transacao, name='apagar_transacao'),
     path('analise-anual/', views.analise_anual, name='analise_anual'),
 
@@ -27,6 +28,8 @@ urlpatterns = [
     # --- CATEGORIAS ---
     path('categorias/', views.gerenciar_categorias, name='gerenciar_categorias'),
     path('categorias/nova/', views.nova_categoria, name='nova_categoria'),
+    path('categorias/guardar-sobra/', views.guardar_sobra, name='guardar_sobra'),
+    path('categorias/editar/<int:id>/', views.editar_categoria, name='editar_categoria'),
 
     # --- GASTOS FIXOS (CONTAS) ---
     path('fixos/', views.gerenciar_fixos, name='gerenciar_fixos'),
@@ -38,6 +41,10 @@ urlpatterns = [
     path('receitas-fixas/', views.gerenciar_receitas_fixas, name='gerenciar_receitas_fixas'),
     path('receitas-fixas/nova/', views.nova_receita_fixa, name='nova_receita_fixa'),
     path('receitas-fixas/apagar/<int:id>/', views.apagar_receita_fixa, name='apagar_receita_fixa'),
+    path('receita/excluir/<int:id>/', views.excluir_receita, name='excluir_receita'),
+    path('receita/editar/<int:id>/', views.editar_receita, name='editar_receita'),
+    path('editar-fixo/<int:id>/', views.editar_gasto_fixo, name='editar_gasto_fixo'),
+    path('excluir-fixo/<int:id>/', views.excluir_gasto_fixo, name='excluir_gasto_fixo'),
 
     path('relatorios/categorias/', views.relatorio_categorias, name='relatorio_categorias'),
     path('relatorios/anual/', views.relatorio_anual, name='relatorio_anual'),

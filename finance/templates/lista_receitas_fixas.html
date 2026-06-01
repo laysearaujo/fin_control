@@ -13,18 +13,31 @@
     {% for item in fixas %}
     <div class="col-md-4">
         <div class="card card-custom p-4 mb-3 border-start border-4 border-success">
-            <div class="d-flex justify-content-between">
-                <h5 class="fw-bold">{{ item.descricao }}</h5>
-                <a href="{% url 'apagar_receita_fixa' item.id %}" class="text-danger small text-decoration-none">Excluir</a>
+            
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h5 class="fw-bold mb-0">{{ item.descricao }}</h5>
+                <a href="{% url 'apagar_receita_fixa' item.id %}" class="text-danger small text-decoration-none" title="Apagar salário">
+                    🗑️ Excluir
+                </a>
             </div>
-            <h3 class="fw-bold text-dark mt-2">R$ {{ item.valor }}</h3>
-            <small class="text-muted">Recebe dia {{ item.dia_recebimento }}</small>
+            
+            <h3 class="fw-bold text-dark mt-2">R$ {{ item.valor|floatformat:2 }}</h3>
+            
+            <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
+                <small class="text-muted">Dia {{ item.dia_recebimento }}</small>
+                
+                <a href="{% url 'nova_receita' %}?fixa_id={{ item.id }}" class="btn btn-sm btn-success fw-bold rounded-pill px-3 shadow-sm">
+                    💲 Receber
+                </a>
+            </div>
+
         </div>
     </div>
     {% empty %}
     <div class="col-12">
-        <div class="alert alert-light text-center">
-            Nenhuma renda fixa cadastrada.
+        <div class="alert alert-light text-center py-5 text-muted">
+            <span class="fs-1 d-block mb-2">💼</span>
+            Nenhuma renda fixa cadastrada ainda.
         </div>
     </div>
     {% endfor %}
