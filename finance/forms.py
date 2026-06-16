@@ -86,8 +86,11 @@ class SetupInicialForm(forms.Form):
 class CaixinhaForm(BootstrapModelForm):
     class Meta:
         model = Caixinha
-        fields = ['nome', 'saldo_atual', 'meta_cdi']
-        widgets = { 'nome': forms.TextInput(attrs={'placeholder': 'Ex: Reserva, Viagem...'}) }
+        fields = ['nome', 'saldo_atual', 'meta_cdi', 'meta_valor'] # Adicionado 'meta_valor'
+        widgets = { 
+            'nome': forms.TextInput(attrs={'placeholder': 'Ex: Reserva, Viagem...'}),
+            'meta_valor': forms.NumberInput(attrs={'placeholder': 'Ex: 1500.00 (Opcional)', 'step': '0.01'}),
+        }
 
 class EmprestimoProprioForm(BootstrapModelForm):
     class Meta:

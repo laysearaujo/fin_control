@@ -16,6 +16,8 @@ urlpatterns = [
     path('caixinhas/', views.caixinhas, name='caixinhas'),
     path('caixinhas/nova/', views.nova_caixinha, name='nova_caixinha'),
     path('caixinhas/emprestimo/', views.novo_emprestimo_proprio, name='novo_emprestimo_proprio'),
+    path('caixinhas/editar/<int:id>/', views.editar_caixinha, name='editar_caixinha'),
+    path('caixinhas/apagar/<int:id>/', views.apagar_caixinha, name='apagar_caixinha'),
 
     # --- TRANSAÇÕES (RECEITA E DESPESA) ---
     path('despesa/nova/', views.nova_transacao, name='nova_transacao'),
@@ -24,12 +26,15 @@ urlpatterns = [
     # --- CARTÕES ---
     path('cartoes/', views.gerenciar_cartoes, name='gerenciar_cartoes'),
     path('cartoes/novo/', views.novo_cartao, name='novo_cartao'),
+    path('cartoes/editar/<int:id>/', views.editar_cartao, name='editar_cartao'),
+    path('cartoes/apagar/<int:id>/', views.apagar_cartao, name='apagar_cartao'),
     
     # --- CATEGORIAS ---
     path('categorias/', views.gerenciar_categorias, name='gerenciar_categorias'),
     path('categorias/nova/', views.nova_categoria, name='nova_categoria'),
     path('categorias/guardar-sobra/', views.guardar_sobra, name='guardar_sobra'),
     path('categorias/editar/<int:id>/', views.editar_categoria, name='editar_categoria'),
+    path('categorias/apagar/<int:id>/', views.apagar_categoria, name='apagar_categoria'),
 
     # --- GASTOS FIXOS (CONTAS) ---
     path('fixos/', views.gerenciar_fixos, name='gerenciar_fixos'),

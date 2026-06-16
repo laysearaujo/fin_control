@@ -275,6 +275,27 @@ def nova_caixinha(request):
         return redirect('caixinhas')
     return render(request, 'form_generico.html', {'form': form, 'titulo': '💰 Nova Caixinha'})
 
+def editar_caixinha(request, id):
+    """Permite alterar as configurações e metas de uma caixinha"""
+    caixinha = get_object_or_404(Caixinha, id=id)
+    # instance=caixinha traz os dados antigos preenchidos no formulário genérico
+    form = CaixinhaForm(request.POST or None, instance=caixinha)
+    
+    if form.is_valid():
+        form.save()
+        return redirect('caixinhas')
+        
+    return render(request, 'form_generico.html', {
+        'form': form,
+        'titulo': f'✏️ Editar Caixinha: {caixinha.nome}'
+    })
+
+def apagar_caixinha(request, id):
+    """Exclui permanentemente a caixinha virtual"""
+    caixinha = get_object_or_404(Caixinha, id=id)
+    caixinha.delete()
+    return redirect('caixinhas')
+
 def novo_emprestimo_proprio(request):
     form = EmprestimoProprioForm(request.POST or None)
     if form.is_valid():
@@ -442,6 +463,26 @@ def novo_cartao(request):
         return redirect('gerenciar_cartoes')
     return render(request, 'form_generico.html', {'form': form, 'titulo': '💳 Novo Cartão'})
 
+def editar_cartao(request, id):
+    cartao = get_object_or_404(CartaoCredito, id=id)
+    
+    # Usa o form_generico já preenchido com os dados do cartão
+    form = CartaoForm(request.POST or None, instance=cartao)
+    
+    if form.is_valid():
+        form.save()
+        return redirect('gerenciar_cartoes')
+        
+    return render(request, 'form_generico.html', {
+        'form': form, 
+        'titulo': f'✏️ Editar Cartão: {cartao.nome}'
+    })
+
+def apagar_cartao(request, id):
+    cartao = get_object_or_404(CartaoCredito, id=id)
+    cartao.delete()
+    return redirect('gerenciar_cartoes')
+
 # --- 5. GERENCIAMENTO DE CATEGORIAS ---
 
 def gerenciar_categorias(request):
@@ -460,8 +501,15 @@ def gerenciar_categorias(request):
         # Soma o que já foi gasto nesta categoria no mês atual (Débito + Cartão)
         gasto_debito = Transacao.objects.filter(categoria=cat, eh_cartao=False, data_compra__month=mes_atual, data_compra__year=ano_atual).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
         gasto_cartao = Parcela.objects.filter(transacao__categoria=cat, data_vencimento__month=mes_atual, data_vencimento__year=ano_atual).aggregate(Sum('valor'))['valor__sum'] or 0
+
+        fixos_cartao = GastoFixo.objects.filter(
+            categoria=cat, 
+            eh_cartao=True
+        ).aggregate(Sum('valor_previsto'))['valor_previsto__sum'] or 0
         
-        gasto_total = gasto_debito + gasto_cartao
+        # O Gasto Total agora soma os 3 (Débito + Parcelas do Cartão + Assinaturas do Cartão)
+        gasto_total = gasto_debito + gasto_cartao + fixos_cartao
+        
         sobra = cat.teto_mensal - gasto_total
 
         categorias_com_detalhes.append({
@@ -484,6 +532,13 @@ def gerenciar_categorias(request):
     }
     return render(request, 'lista_categorias.html', context)
 
+def apagar_categoria(request, id):
+    """Permite excluir uma categoria do sistema"""
+    categoria = get_object_or_404(Categoria, id=id)
+
+    categoria.delete()
+    
+    return redirect('gerenciar_categorias')
 
 def guardar_sobra(request):
     """Função que tira o dinheiro do saldo livre e joga na caixinha"""
@@ -709,32 +764,39 @@ def relatorio_categorias(request):
     mes = int(request.GET.get('mes', timezone.now().month))
     ano = int(request.GET.get('ano', timezone.now().year))
     
-    # 1. Gastos via Débito/Dinheiro (Transacoes normais)
+    # 1. Gastos via Débito/Dinheiro (IGNORANDO O PAGAMENTO DA FATURA!)
     gastos_avulsos = Transacao.objects.filter(
         eh_cartao=False, 
+        eh_pagamento_fatura=False, # <--- A MÁGICA QUE TIRA A DUPLICAÇÃO AQUI
         data_compra__month=mes, 
         data_compra__year=ano
     ).values('categoria__nome').annotate(total=Sum('valor_total'))
 
     # 2. Gastos via Cartão (Parcelas que caem neste mês)
-    # Aqui precisamos fazer uma 'mágica' para pegar a categoria da transação original
     parcelas = Parcela.objects.filter(
         data_vencimento__month=mes,
         data_vencimento__year=ano
     ).select_related('transacao__categoria')
 
-    # Agrupar parcelas manualmente (Python) pois o GroupBy via ORM fica complexo aqui
+    # 3. Assinaturas e Fixos no Cartão (Para os streamings aparecerem no gráfico!)
+    fixos_cartao = GastoFixo.objects.filter(eh_cartao=True).select_related('categoria')
+
     dados_finais = {} # Ex: {'Mercado': 500, 'Lazer': 200}
 
     # Soma os avulsos
     for g in gastos_avulsos:
         nome = g['categoria__nome'] or 'Sem Categoria'
-        dados_finais[nome] = dados_finais.get(nome, 0) + float(g['total'])
+        dados_finais[nome] = dados_finais.get(nome, 0) + float(g['total'] or 0)
 
     # Soma as parcelas de cartão
     for p in parcelas:
         nome = p.transacao.categoria.nome if p.transacao.categoria else 'Sem Categoria'
-        dados_finais[nome] = dados_finais.get(nome, 0) + float(p.valor)
+        dados_finais[nome] = dados_finais.get(nome, 0) + float(p.valor or 0)
+
+    # Soma as assinaturas do cartão
+    for f in fixos_cartao:
+        nome = f.categoria.nome if f.categoria else 'Sem Categoria'
+        dados_finais[nome] = dados_finais.get(nome, 0) + float(f.valor_previsto or 0)
 
     # Prepara para o Chart.js
     labels = list(dados_finais.keys())
@@ -932,26 +994,22 @@ def editar_conta_avulsa(request, id):
     return redirect('/')
 
 def editar_gasto_fixo(request, id):
-    fixo = GastoFixo.objects.get(id=id)
+    # Puxa o gasto fixo pelo ID
+    fixo = get_object_or_404(GastoFixo, id=id)
     
-    if request.method == 'POST':
-        fixo.nome = request.POST.get('nome')
-        fixo.valor_previsto = request.POST.get('valor')
-        fixo.dia_vencimento = request.POST.get('dia_vencimento')
-        
-        # Tenta pegar a categoria se ela existir no seu modelo de GastoFixo
-        cat_id = request.POST.get('categoria_id')
-        if cat_id:
-             # Se seu modelo GastoFixo tiver o campo categoria, descomente a linha abaixo:
-             # fixo.categoria_id = cat_id
-             pass 
-
-        fixo.save()
-        
-        # Redireciona de volta para a dashboard
-        return redirect('/')
+    # Carrega o nosso formulário inteligente já preenchido com os dados (instance=fixo)
+    form = GastoFixoForm(request.POST or None, instance=fixo)
     
-    return redirect('/')
+    if form.is_valid():
+        form.save()
+        # Após salvar, volta para a lista de contas fixas
+        return redirect('gerenciar_fixos')
+        
+    # Se não for POST (quando clica no botão ✏️), abre a tela do formulário!
+    return render(request, 'form_generico.html', {
+        'form': form, 
+        'titulo': f'✏️ Editar Recorrente: {fixo.nome}'
+    })
 
 def excluir_gasto_fixo(request, id):
     fixo = GastoFixo.objects.get(id=id)

@@ -27,6 +27,7 @@ class Caixinha(models.Model):
     nome = models.CharField(max_length=100) # Ex: Reserva de Emergência
     saldo_atual = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     meta_cdi = models.DecimalField(max_digits=5, decimal_places=2, default=102, help_text="% do CDI (Ex: 100, 102)")
+    meta_valor = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Meta em R$ para esta caixinha (Opcional)")
     
     def projecao_mes_seguinte(self):
         # Taxa CDI Mensal Aprox (0.85% ao mês)

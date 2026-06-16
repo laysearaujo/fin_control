@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Minhas Finanças</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23198754'><path d='M8.5 1h-1A1.5 1.5 0 0 0 6 2.5V3h4v-.5A1.5 1.5 0 0 0 8.5 1M11 3v-.5A2.5 2.5 0 0 0 8.5 0h-1A2.5 2.5 0 0 0 5 2.5V3H2.5A1.5 1.5 0 0 0 1 4.5v9A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 13.5 3zM3 6V4.5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 .5.5V6zm4.5 4.5a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0m1 0a.5.5 0 1 0 1 0 .5.5 0 0 0-1 0'/></svg>">
+    <title>Guardião</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     
@@ -20,7 +21,9 @@
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 sticky-top">
     <div class="container">
-        <a class="navbar-brand fw-bold" href="{% url 'dashboard' %}">🚀 Finanças</a>
+        <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="{% url 'dashboard' %}">
+            <i class="bi bi-safe2-fill text-success fs-4"></i> Guardião<span class="text-success">.</span>
+        </a>
         
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
             <span class="navbar-toggler-icon"></span>
@@ -29,34 +32,38 @@
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'dashboard' %}">📊 Dashboard</a>
-                </li>
-
-                <li class="nav-item">
-                    <a class="nav-link text-success fw-bold" href="{% url 'caixinhas' %}">🐖 Caixinhas</a>
+                    <a class="nav-link" href="{% url 'extrato' %}">📜 Extrato</a>
                 </li>
 
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                        📈 Relatórios
+                    <a class="nav-link dropdown-toggle fw-bold" href="#" role="button" data-bs-toggle="dropdown">
+                        🎯 Meu Dinheiro
                     </a>
                     <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="{% url 'relatorio_categorias' %}">🍕 Gastos por Categoria</a></li>
-                        <li><a class="dropdown-item" href="{% url 'relatorio_anual' %}">🗓️ Semáforo Anual</a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item" href="{% url 'extrato' %}">📜 Extrato Detalhado</a></li>
+                        <li><a class="dropdown-item fw-bold" href="{% url 'gerenciar_categorias' %}">📂 Planejamento (Categorias)</a></li>
+                        <li><a class="dropdown-item fw-bold" href="{% url 'caixinhas' %}">🐖 Minhas Caixinhas</a></li>
                     </ul>
                 </li>
 
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                        ⚙️ Cadastros
+                        📈 Análises
                     </a>
                     <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="{% url 'gerenciar_cartoes' %}">💳 Cartões</a></li>
-                        <li><a class="dropdown-item" href="{% url 'gerenciar_categorias' %}">📂 Categorias</a></li>
-                        <li><a class="dropdown-item" href="{% url 'gerenciar_fixos' %}">🏠 Contas Fixas</a></li>
-                        <li><a class="dropdown-item" href="{% url 'gerenciar_receitas_fixas' %}">💰 Salários</a></li>
+                        <li><a class="dropdown-item" href="{% url 'relatorio_categorias' %}">🍕 Gastos por Categoria</a></li>
+                        <li><a class="dropdown-item" href="{% url 'relatorio_anual' %}">🗓️ Semáforo Anual</a></li>
+                    </ul>
+                </li>
+
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle text-white-50" href="#" role="button" data-bs-toggle="dropdown">
+                        ⚙️ Cadastros Fixos
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{% url 'gerenciar_fixos' %}">🏠 Gastos Recorrentes</a></li>
+                        <li><a class="dropdown-item" href="{% url 'gerenciar_receitas_fixas' %}">💰 Salários e Entradas</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="{% url 'gerenciar_cartoes' %}">💳 Cartões de Crédito</a></li>
                     </ul>
                 </li>
             </ul>

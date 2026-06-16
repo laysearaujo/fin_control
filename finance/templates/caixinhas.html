@@ -14,15 +14,62 @@
 
 <div class="row">
     {% for box in caixinhas %}
-    <div class="col-md-4">
-        <div class="card card-custom p-4 mb-3 h-100 shadow-sm border-start border-4 border-success">
-            <div class="d-flex justify-content-between">
-                <h5 class="fw-bold">{{ box.nome }}</h5>
-                <span class="badge bg-light text-dark border">{{ box.meta_cdi }}% do CDI</span>
+    <div class="col-md-4 mb-4">
+        <div class="card card-custom p-4 h-100 shadow-sm border-start border-4 border-success d-flex flex-column position-relative">
+            
+            <!-- CABEÇALHO CLEAN: Nome, Rendimento e Menu de 3 Pontinhos -->
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <div>
+                    <h5 class="fw-bold m-0 text-dark">{{ box.nome }}</h5>
+                    <span class="badge bg-light text-muted border mt-1" style="font-size: 0.75rem;">{{ box.meta_cdi }}% do CDI</span>
+                </div>
+                
+                <!-- MENU DE TRÊS PONTINHOS -->
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-light rounded-circle border-0 text-muted d-flex align-items-center justify-content-center" 
+                            type="button" 
+                            data-bs-toggle="dropdown" 
+                            aria-expanded="false" 
+                            style="width: 32px; height: 32px;">
+                        ⋮
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end border-0 shadow rounded-3 p-2">
+                        <li>
+                            <a class="dropdown-item rounded-2 small d-flex align-items-center gap-2 py-2" 
+                               href="{% url 'editar_caixinha' box.id %}">
+                                <span>✏️</span> Editar Configurações
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item rounded-2 small text-danger d-flex align-items-center gap-2 py-2" 
+                               href="{% url 'apagar_caixinha' box.id %}"
+                               onclick="return confirm('Tem certeza que deseja apagar a caixinha &quot;{{ box.nome }}&quot;? Todo o saldo virtual dela será perdido!')">
+                                <span>🗑️</span> Excluir Caixinha
+                            </a>
+                        </li>
+                    </ul>
+                </div>
             </div>
             
             <h2 class="text-dark fw-bold my-3">R$ {{ box.saldo_atual|floatformat:2 }}</h2>
             
+            <!-- Bloco da Meta Dinâmica (Se existir) -->
+            {% if box.meta_valor %}
+                <div class="mb-3 p-2 bg-light rounded border border-light-subtle">
+                    <div class="d-flex justify-content-between small fw-bold mb-1">
+                        <span class="text-secondary">🎯 Meta: R$ {{ box.meta_valor|floatformat:2 }}</span>
+                        <span class="text-primary">
+                            {% widthratio box.saldo_atual box.meta_valor 100 as pct %}
+                            {{ pct }}%
+                        </span>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-primary progress-bar-striped" role="progressbar" style="width: {% widthratio box.saldo_atual box.meta_valor 100 %}%"></div>
+                    </div>
+                </div>
+            {% endif %}
+
             <div class="bg-light p-2 rounded mb-3 small">
                 <span class="text-muted">Rendimento estimado:</span>
                 <div class="d-flex justify-content-between align-items-center">
@@ -31,6 +78,7 @@
                 </div>
             </div>
 
+            <!-- Formulário rápido para atualizar saldo diário/mensal -->
             <form method="POST" class="mt-auto">
                 {% csrf_token %}
                 <input type="hidden" name="caixinha_id" value="{{ box.id }}">
