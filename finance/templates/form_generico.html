@@ -18,9 +18,19 @@
                         <div class="small text-muted mt-1 ms-2">Ative para escolher parcelas e lançar na fatura.</div>
                     </div>
                 {% endif %}
+
+                {% if form.logica_reversa %}
+                    <div class="mb-4 form-check form-switch p-3 rounded-3" style="background-color: #e8f5e9; border: 2px solid #c8e6c9;">
+                        {{ form.logica_reversa }}
+                        <label class="form-check-label fw-bold text-success ms-2" style="font-size: 1.1rem; cursor: pointer;" for="{{ form.logica_reversa.id_for_label }}">
+                            🔄 É uma categoria de Aporte / Reserva?
+                        </label>
+                        <div class="small text-muted mt-1 ms-2">Ative para inverter as cores: Guardar mais que a meta ficará verde.</div>
+                    </div>
+                {% endif %}
                 
                 {% for field in form %}
-                    {% if field.name != 'eh_cartao' %}
+                    {% if field.name != 'eh_cartao' and field.name != 'logica_reversa' %}
                         <div class="mb-3" id="div_{{ field.name }}"> 
                             <label class="form-label fw-bold text-muted small text-uppercase" id="label_{{ field.name }}">{{ field.label }}</label>
                             {{ field }}
@@ -43,14 +53,55 @@
 
 <script>
     document.addEventListener("DOMContentLoaded", function() {
+        // --- 1. VARIÁVEIS DO CARTÃO ---
         const checkbox = document.getElementById('check_cartao') || document.getElementById('id_eh_cartao');
         const divCartao = document.getElementById('div_cartao');
         const divParcelas = document.getElementById('div_qtd_parcelas');
-        
         const inputValor = document.getElementById('id_valor_total');
         const inputParcelas = document.getElementById('id_qtd_parcelas');
         const form = document.getElementById('formGenerico');
 
+        // --- 2. VARIÁVEIS DA CAIXINHA (NOVO) ---
+        const checkLogica = document.getElementById('id_logica_reversa');
+        if (checkLogica) {
+            checkLogica.classList.remove("form-control", "form-control-lg");
+            checkLogica.classList.add("form-check-input"); // Essencial pro Bootstrap fazer o botão deslizar
+            checkLogica.style.width = "2.8em";
+            checkLogica.style.height = "1.5em";
+            checkLogica.style.cursor = "pointer";
+        }
+        const selectCategoria = document.getElementById('id_categoria');
+        const divCaixinha = document.getElementById('div_caixinha_destino');
+        const inputCaixinha = document.getElementById('id_caixinha_destino');
+
+        // ==========================================
+        // LÓGICA DA CAIXINHA DE DESTINO (APORTES)
+        // ==========================================
+        if (selectCategoria && divCaixinha) {
+            function checarMostrarCaixinha() {
+                // Pega a opção selecionada no campo Categoria
+                if (selectCategoria.selectedIndex >= 0) {
+                    const textoOpcao = selectCategoria.options[selectCategoria.selectedIndex].text.toLowerCase();
+                    
+                    // Se o nome da categoria tiver 'aporte', 'reserva' ou 'investimento', exibe o campo
+                    if (textoOpcao.includes('aporte') || textoOpcao.includes('reserva') || textoOpcao.includes('investimento')) {
+                        divCaixinha.style.display = 'block';
+                    } else {
+                        // Se for uma despesa normal, esconde e limpa a caixinha
+                        divCaixinha.style.display = 'none';
+                        if (inputCaixinha) inputCaixinha.value = ''; 
+                    }
+                }
+            }
+
+            // Roda ao carregar a página e toda vez que mudar a categoria
+            checarMostrarCaixinha();
+            selectCategoria.addEventListener('change', checarMostrarCaixinha);
+        }
+
+        // ==========================================
+        // LÓGICA DO CARTÃO DE CRÉDITO (MANTIDA)
+        // ==========================================
         if (checkbox) {
             // Arruma o visual do botão (tira a barra gigante do Django)
             checkbox.classList.remove("form-control", "form-control-lg");

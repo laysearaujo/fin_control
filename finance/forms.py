@@ -11,13 +11,13 @@ class BootstrapModelForm(forms.ModelForm):
 class TransacaoForm(BootstrapModelForm):
     class Meta:
         model = Transacao
-        fields = ['descricao', 'valor_total', 'categoria', 'eh_cartao', 'cartao', 'qtd_parcelas', 'data_compra']
+        fields = ['descricao', 'valor_total', 'categoria', 'caixinha_destino', 'eh_cartao', 'cartao', 'qtd_parcelas', 'data_compra']
         widgets = {
             'data_compra': forms.DateInput(attrs={'type': 'date'}),
             'descricao': forms.TextInput(attrs={'placeholder': 'Ex: Mercado, Uber...'}),
             'categoria': forms.Select(attrs={'class': 'form-select'}),
+            'caixinha_destino': forms.Select(attrs={'class': 'form-select'}),
             'eh_cartao': forms.CheckboxInput(attrs={'class': 'form-check-input', 'role': 'switch', 'id': 'check_cartao'}),
-            
             'cartao': forms.Select(attrs={'class': 'form-select'}),
             'qtd_parcelas': forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'value': 1}),
         }
@@ -50,7 +50,7 @@ class CartaoForm(BootstrapModelForm):
 class CategoriaForm(BootstrapModelForm):
     class Meta:
         model = Categoria
-        fields = ['nome', 'teto_mensal']
+        fields = ['nome', 'teto_mensal', 'logica_reversa']
         widgets = {
              'nome': forms.TextInput(attrs={'placeholder': 'Ex: Alimentação, Lazer...'}),
         }

@@ -1,5 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Sum
+from django.db import transaction
 from django.utils import timezone
 from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
@@ -247,8 +248,6 @@ def dashboard(request):
         'itens_fatura_detalhe': itens_fatura_detalhe, 
         'fatura_paga': fatura_paga,
         'total_investido': Caixinha.objects.aggregate(Sum('saldo_atual'))['saldo_atual__sum'] or 0,
-        
-        # [NOVO] Categorias para o Modal
         'categorias': Categoria.objects.all(),
     }
     return render(request, 'dashboard.html', context)
@@ -416,10 +415,32 @@ def analise_anual(request):
 # --- 3. TRANSAÇÕES (DESPESAS E EXTRAS) ---
 
 def nova_transacao(request):
-    form = TransacaoForm(request.POST or None)
-    if form.is_valid():
-        form.save()
-        return redirect('dashboard')
+    if request.method == 'POST':
+        form = TransacaoForm(request.POST)
+        if form.is_valid():
+            # Cria o objeto, mas não salva no banco ainda
+            nova_transacao_obj = form.save(commit=False)
+            
+            try:
+                # transaction.atomic() garante que as duas ações (salvar despesa e atualizar saldo) ocorram juntas
+                with transaction.atomic():
+                    # 1. Salva a transação no banco de dados
+                    nova_transacao_obj.save()
+                    
+                    # 2. A MÁGICA DO APORTE: 
+                    # Verifica se o usuário escolheu uma caixinha E se a categoria tem a lógica reversa (Aporte)
+                    if nova_transacao_obj.caixinha_destino and nova_transacao_obj.categoria.logica_reversa:
+                        caixinha = nova_transacao_obj.caixinha_destino
+                        caixinha.saldo_atual += nova_transacao_obj.valor_total
+                        caixinha.save()
+                        
+                return redirect('dashboard')
+            except Exception as e:
+                # Caso ocorra um erro, ele não quebra o sistema, apenas imprime no console
+                print(f"Erro ao salvar transação: {e}")
+    else:
+        form = TransacaoForm()
+        
     return render(request, 'form_generico.html', {'form': form, 'titulo': '💸 Nova Despesa'})
 
 def nova_receita(request):
@@ -517,7 +538,8 @@ def gerenciar_categorias(request):
             'nome': cat.nome,
             'teto_mensal': cat.teto_mensal,
             'gasto_total': gasto_total,
-            'sobra': sobra if sobra > 0 else 0
+            'sobra': sobra if sobra > 0 else 0,
+            'logica_reversa': cat.logica_reversa
         })
 
     # Puxa as caixinhas para o Modal de guardar dinheiro
@@ -809,48 +831,71 @@ def relatorio_categorias(request):
     })
 
 def relatorio_anual(request):
-    """Gera o Semáforo (Verde/Vermelho) para os 12 meses"""
+    """Gera o Semáforo projetando como o mês DEVE TERMINAR"""
     ano = int(request.GET.get('ano', timezone.now().year))
     hoje = timezone.now().date()
+    mes_atual = hoje.month
+    ano_atual = hoje.year
     
     grid_meses = []
     
-    # Prepara totais fixos para não consultar banco 12x
+    # Valores de planejamento geral
     receita_fixa_total = ReceitaFixa.objects.aggregate(Sum('valor'))['valor__sum'] or 0
     gasto_fixo_total = GastoFixo.objects.aggregate(Sum('valor_previsto'))['valor_previsto__sum'] or 0
 
+    # 1. Pega o saldo real do último dia do ano anterior (Base de cálculo)
+    r_hist = Receita.objects.filter(data__lt=date(ano, 1, 1)).aggregate(Sum('valor'))['valor__sum'] or 0
+    d_hist = Transacao.objects.filter(eh_cartao=False, data_compra__lt=date(ano, 1, 1)).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
+    saldo_acumulado = r_hist - d_hist
+
     for i in range(1, 13):
         data_ref = date(ano, i, 1)
-        eh_passado = data_ref < date(hoje.year, hoje.month, 1)
         
-        # Receitas
-        receita_extra = Receita.objects.filter(data__month=i, data__year=ano).aggregate(Sum('valor'))['valor__sum'] or 0
-        total_receitas = receita_fixa_total + receita_extra
+        # O mês é passado? (ex: estamos em maio e o loop está em março)
+        is_past = ano < ano_atual or (ano == ano_atual and i < mes_atual)
         
-        # Despesas
-        parcelas = Parcela.objects.filter(data_vencimento__month=i, data_vencimento__year=ano).aggregate(Sum('valor'))['valor__sum'] or 0
-        avulsos = 0
-        
-        if eh_passado:
-            # Se for passado, pega o realizado REAL
-            avulsos = Transacao.objects.filter(eh_cartao=False, data_compra__month=i, data_compra__year=ano).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
-            # No passado, o 'gasto_fixo_total' é substituído pelos pagamentos reais (que estão em 'avulsos')
-            # Então para simplificar o passado: Receita Real - Saída Real
-            receitas_reais = Receita.objects.filter(data__month=i, data__year=ano).aggregate(Sum('valor'))['valor__sum'] or 0 
-            # (Adicione salários fixos ao passado se quiser precisão histórica, mas vamos simplificar)
-            saldo = receitas_reais - (avulsos + parcelas) # Agora puxa apenas a realidade do banco
+        if is_past:
+            # MESES PASSADOS: Saldo real exato cravado no último dia do mês
+            data_limite = data_ref + relativedelta(months=1)
+            r_total = Receita.objects.filter(data__lt=data_limite).aggregate(Sum('valor'))['valor__sum'] or 0
+            d_total = Transacao.objects.filter(eh_cartao=False, data_compra__lt=data_limite).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
+            
+            saldo = r_total - d_total
+            saldo_acumulado = saldo # Atualiza a bola de neve real
             
         else:
-            # Futuro: Previsão
-            # Avulsos futuros não existem ainda, então usamos Fixos + Parcelas
-            saldo = total_receitas - (gasto_fixo_total + parcelas)
+            # MÊS ATUAL E FUTUROS: Projeção de como o mês VAI FECHAR (O que você queria!)
+            
+            # A. Receitas Projetadas (Se já entrou um dinheiro extra, ele usa o maior valor)
+            receitas_reais = Receita.objects.filter(data__month=i, data__year=ano).aggregate(Sum('valor'))['valor__sum'] or 0
+            receita_projetada = max(receita_fixa_total, receitas_reais)
+            
+            # B. Despesas Projetadas (Soma os compromissos fixos, cartão e avulsas)
+            parcelas = Parcela.objects.filter(data_vencimento__month=i, data_vencimento__year=ano).aggregate(Sum('valor'))['valor__sum'] or 0
+            avulsas = ContaAvulsa.objects.filter(data_vencimento__month=i, data_vencimento__year=ano).aggregate(Sum('valor'))['valor__sum'] or 0
+            
+            # Pega também os gastos que você já fez no débito (ex: padaria) para não ignorar o que já foi gasto hoje
+            gastos_extras_debito = Transacao.objects.filter(
+                eh_cartao=False, 
+                eh_pagamento_fatura=False,
+                gasto_fixo__isnull=True,    # Ignora fixos (para não cobrar 2x)
+                conta_avulsa__isnull=True,  # Ignora avulsas (para não cobrar 2x)
+                data_compra__month=i, 
+                data_compra__year=ano
+            ).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
+            
+            despesa_projetada = gasto_fixo_total + parcelas + avulsas + gastos_extras_debito
+            
+            # C. Matemática do Fechamento
+            saldo = saldo_acumulado + receita_projetada - despesa_projetada
+            saldo_acumulado = saldo # Atualiza a bola de neve projetada para o próximo mês
 
         grid_meses.append({
             'mes_num': i,
-            'mes_nome': data_ref.strftime('%B'), # Nome do mês
+            'mes_nome': data_ref.strftime('%B'),
             'saldo': saldo,
-            'cor': 'success' if saldo >= 0 else 'danger', # Verde ou Vermelho
-            'passado': eh_passado
+            'cor': 'success' if saldo >= 0 else 'danger',
+            'passado': is_past
         })
 
     return render(request, 'relatorio_anual.html', {'ano': ano, 'grid': grid_meses})

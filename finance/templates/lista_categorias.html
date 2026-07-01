@@ -34,8 +34,8 @@
                 <tr>
                     <th class="p-3">Categoria</th>
                     <th class="p-3">Meta (Teto Mensal)</th>
-                    <th class="p-3">Já Gasto (Mês Atual)</th>
-                    <th class="p-3">Sobra Real</th>
+                    <th class="p-3">Já Realizado (Mês Atual)</th>
+                    <th class="p-3">Sobra / Status</th>
                     <th class="p-3 text-center">Ação</th>
                 </tr>
             </thead>
@@ -45,14 +45,37 @@
                     <td class="p-3 fw-bold">{{ cat.nome }}</td>
                     <td class="p-3 text-muted">R$ {{ cat.teto_mensal|floatformat:2 }}</td>
                     
-                    <!-- LÓGICA DO GASTO COM ALERTA -->
-                    <td class="p-3 {% if cat.gasto_total > cat.teto_mensal %}text-danger fw-bold{% else %}text-dark{% endif %}">
+                    <!-- LÓGICA DO GASTO COM ALERTA (ATUALIZADA) -->
+                    <td class="p-3 fw-bold
+                        {% if cat.logica_reversa %}
+                            {% if cat.gasto_total >= cat.teto_mensal %}text-success{% else %}text-danger{% endif %}
+                        {% else %}
+                            {% if cat.gasto_total > cat.teto_mensal %}text-danger{% else %}text-dark{% endif %}
+                        {% endif %}">
                         R$ {{ cat.gasto_total|floatformat:2 }}
+                        {% if cat.logica_reversa %}
+                            <br><small class="text-muted fw-normal" style="font-size: 0.75rem;">(Investimento/Aporte)</small>
+                        {% endif %}
                     </td>
                     
-                    <!-- LÓGICA DA SOBRA -->
-                    <td class="p-3 fw-bold {% if cat.sobra > 0 %}text-success{% else %}text-muted{% endif %}">
-                        R$ {{ cat.sobra|floatformat:2 }}
+                    <!-- LÓGICA DA SOBRA (ATUALIZADA) -->
+                    <td class="p-3 fw-bold 
+                        {% if cat.logica_reversa %}
+                            {% if cat.sobra > 0 %}text-danger{% else %}text-success{% endif %}
+                        {% else %}
+                            {% if cat.sobra > 0 %}text-success{% else %}text-muted{% endif %}
+                        {% endif %}">
+                        
+                        <!-- Textos adaptados de acordo com o tipo da categoria -->
+                        {% if cat.logica_reversa %}
+                            {% if cat.sobra > 0 %}
+                                Faltam R$ {{ cat.sobra|floatformat:2 }}
+                            {% else %}
+                                Meta Atingida! 🎯
+                            {% endif %}
+                        {% else %}
+                            R$ {{ cat.sobra|floatformat:2 }}
+                        {% endif %}
                     </td>
                     
                     <!-- LÓGICA DOS BOTÕES ALINHADOS -->
