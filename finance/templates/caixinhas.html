@@ -17,14 +17,25 @@
     <div class="col-md-4 mb-4">
         <div class="card card-custom p-4 h-100 shadow-sm border-start border-4 border-success d-flex flex-column position-relative">
             
-            <!-- CABEÇALHO CLEAN: Nome, Rendimento e Menu de 3 Pontinhos -->
             <div class="d-flex justify-content-between align-items-start mb-2">
                 <div>
-                    <h5 class="fw-bold m-0 text-dark">{{ box.nome }}</h5>
+                    <div class="d-flex align-items-center gap-2">
+                        <h5 class="fw-bold m-0 text-dark">{{ box.nome }}</h5>
+                        
+                        {% if box.descricao %}
+                            <button class="btn p-0 border-0 text-muted lh-1 btn-setinha" 
+                                    type="button" 
+                                    data-bs-toggle="collapse" 
+                                    data-bs-target="#descCaixinha{{ box.id }}" 
+                                    aria-expanded="false" 
+                                    style="transition: transform 0.2s ease;">
+                                <i class="bi bi-chevron-down small"></i>
+                            </button>
+                        {% endif %}
+                    </div>
                     <span class="badge bg-light text-muted border mt-1" style="font-size: 0.75rem;">{{ box.meta_cdi }}% do CDI</span>
                 </div>
                 
-                <!-- MENU DE TRÊS PONTINHOS -->
                 <div class="dropdown">
                     <button class="btn btn-sm btn-light rounded-circle border-0 text-muted d-flex align-items-center justify-content-center" 
                             type="button" 
@@ -51,10 +62,19 @@
                     </ul>
                 </div>
             </div>
+
+            {% if box.descricao %}
+                <div class="collapse" id="descCaixinha{{ box.id }}">
+                    <div class="mt-2 p-2 bg-light rounded text-muted small border-start border-2 border-secondary" style="font-size: 0.85rem;">
+                        {{ box.descricao|linebreaksbr }}
+                    </div>
+                </div>
+            {% endif %}
             
-            <h2 class="text-dark fw-bold my-3">R$ {{ box.saldo_atual|floatformat:2 }}</h2>
+            <a href="{% url 'detalhes_caixinha' box.id %}" class="text-decoration-none">
+                <h2 class="text-dark fw-bold my-3 hover-saldo">R$ {{ box.saldo_atual|floatformat:2 }}</h2>
+            </a>
             
-            <!-- Bloco da Meta Dinâmica (Se existir) -->
             {% if box.meta_valor %}
                 <div class="mb-3 p-2 bg-light rounded border border-light-subtle">
                     <div class="d-flex justify-content-between small fw-bold mb-1">
@@ -78,7 +98,6 @@
                 </div>
             </div>
 
-            <!-- Formulário rápido para atualizar saldo diário/mensal -->
             <form method="POST" class="mt-auto">
                 {% csrf_token %}
                 <input type="hidden" name="caixinha_id" value="{{ box.id }}">
@@ -101,4 +120,10 @@
     </div>
     {% endfor %}
 </div>
+
+<style>
+    .btn-setinha[aria-expanded="true"] {
+        transform: rotate(180deg);
+    }
+</style>
 {% endblock %}

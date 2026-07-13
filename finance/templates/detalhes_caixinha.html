@@ -1,0 +1,150 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <a href="{% url 'caixinhas' %}" class="btn btn-sm btn-light border rounded-pill px-3 mb-2">⬅️ Voltar para Caixinhas</a>
+        <h2 class="fw-bold m-0">📊 Painel: {{ caixinha.nome }}</h2>
+        <span class="badge bg-success bg-opacity-10 text-success border mt-1">{{ caixinha.meta_cdi }}% do CDI</span>
+    </div>
+    <h1 class="fw-bold text-dark m-0">R$ {{ caixinha.saldo_atual|floatformat:2 }}</h1>
+</div>
+
+{% if caixinha.descricao %}
+<div class="alert bg-white border shadow-sm rounded-4 mb-4">
+    <h6 class="fw-bold text-muted small text-uppercase mb-1">📝 Descrição / Objetivo</h6>
+    <p class="m-0 text-secondary small">{{ caixinha.descricao }}</p>
+</div>
+{% endif %}
+
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="card card-custom p-4 bg-white h-100 shadow-sm border-0 rounded-4">
+            <h5 class="fw-bold mb-3">🎯 Meta de Economia</h5>
+            {% if caixinha.meta_valor %}
+                <div class="text-center py-2">
+                    <small class="text-muted text-uppercase fw-bold">Alvo Definido</small>
+                    <h2 class="fw-bold text-primary my-1">R$ {{ caixinha.meta_valor|floatformat:2 }}</h2>
+                </div>
+                
+                <div class="mb-3 mt-2">
+                    <div class="d-flex justify-content-between small fw-bold mb-1">
+                        <span class="text-secondary">Progresso</span>
+                        <span class="text-primary">{{ porcentagem_meta }}%</span>
+                    </div>
+                    <div class="progress shadow-sm" style="height: 12px; border-radius: 20px;">
+                        <div class="progress-bar bg-primary progress-bar-striped progress-bar-animated" role="progressbar" style="width: {{ porcentagem_meta }}%"></div>
+                    </div>
+                </div>
+
+                {% if falta_para_meta > 0 %}
+                    <div class="alert alert-warning py-2 mb-0 border-0 small text-center">
+                        Faltam <strong>R$ {{ falta_para_meta|floatformat:2 }}</strong> para atingir seu objetivo!
+                    </div>
+                {% else %}
+                    <div class="alert alert-success py-2 mb-0 border-0 small text-center">
+                        🎉 <strong>Meta Atingida!</strong> Parabéns!
+                    </div>
+                {% endif %}
+            {% else %}
+                <div class="text-center text-muted py-5">
+                    <span class="fs-1 d-block">🏁</span>
+                    <p class="small m-0">Nenhuma meta em dinheiro configurada para esta caixinha.</p>
+                    <a href="{% url 'editar_caixinha' caixinha.id %}" class="btn btn-sm btn-link text-decoration-none">Definir uma meta</a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card card-custom p-4 bg-white h-100 shadow-sm border-0 rounded-4">
+            <h5 class="fw-bold mb-3">📈 Projeção de Rendimentos (Futuro)</h5>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 text-center">
+                    <thead class="table-light text-secondary small text-uppercase">
+                        <tr>
+                            <th>Prazo</th>
+                            <th>Rendimento Estimado</th>
+                            <th>Saldo Final Previsto</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in projecoes %}
+                        <tr>
+                            <td class="fw-bold text-dark">Em {{ p.meses }} {% if p.meses == 1 %}mês{% else %}meses{% endif %}</td>
+                            <td class="text-success fw-bold">+ R$ {{ p.lucro|floatformat:2 }}</td>
+                            <td class="fw-bold text-primary">R$ {{ p.total|floatformat:2 }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="card card-custom p-4 bg-white shadow-sm border-0 rounded-4 h-100">
+            <h5 class="fw-bold mb-3">📈 Tendência de Crescimento (Próximos 6 Meses)</h5>
+            <canvas id="graficoCrescimento" height="180"></canvas>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card card-custom p-4 bg-white shadow-sm border-0 rounded-4 h-100">
+            <h5 class="fw-bold mb-3">📜 Histórico de Aportes nesta Caixinha</h5>
+            <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light sticky-top">
+                        <tr>
+                            <th class="small text-muted text-uppercase">Data</th>
+                            <th class="small text-muted text-uppercase">Descrição</th>
+                            <th class="small text-muted text-uppercase text-end">Valor</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in historico %}
+                        <tr>
+                            <td class="small text-muted">{{ t.data_compra|date:"d/m/Y" }}</td>
+                            <td class="fw-bold text-dark">{{ t.descricao }}</td>
+                            <td class="text-end text-success fw-bold">+ R$ {{ t.valor_total|floatformat:2 }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="3" class="text-center text-muted py-5 small">Nenhum aporte direto registrado via despesa ainda.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const ctx = document.getElementById('graficoCrescimento');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: {{ labels_grafico|safe }},
+            datasets: [{
+                label: 'Projeção de Patrimônio (R$)',
+                data: {{ dados_grafico|safe }},
+                borderColor: '#198754',
+                backgroundColor: 'rgba(25, 135, 84, 0.05)',
+                borderWidth: 3,
+                fill: true,
+                tension: 0.3,
+                pointBackgroundColor: '#198754'
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: false } }
+        }
+    });
+</script>
+{% endblock %}

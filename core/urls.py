@@ -18,6 +18,7 @@ urlpatterns = [
     path('caixinhas/emprestimo/', views.novo_emprestimo_proprio, name='novo_emprestimo_proprio'),
     path('caixinhas/editar/<int:id>/', views.editar_caixinha, name='editar_caixinha'),
     path('caixinhas/apagar/<int:id>/', views.apagar_caixinha, name='apagar_caixinha'),
+    path('caixinhas/detalhes/<int:id>/', views.detalhes_caixinha, name='detalhes_caixinha'),
 
     # --- TRANSAÇÕES (RECEITA E DESPESA) ---
     path('despesa/nova/', views.nova_transacao, name='nova_transacao'),

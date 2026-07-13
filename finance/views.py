@@ -295,6 +295,56 @@ def apagar_caixinha(request, id):
     caixinha.delete()
     return redirect('caixinhas')
 
+def detalhes_caixinha(request, id):
+    caixinha = get_object_or_404(Caixinha, id=id)
+    
+    # 1. Busca todos os aportes/histórico vinculados a essa caixinha
+    historico = Transacao.objects.filter(caixinha_destino=caixinha).order_by('-data_compra')
+    
+    # 2. Lógica da Meta
+    falta_para_meta = 0
+    porcentagem_meta = 0
+    if caixinha.meta_valor:
+        falta_para_meta = max(0, caixinha.meta_valor - caixinha.saldo_atual)
+        porcentagem_meta = min(100, int((caixinha.saldo_atual / caixinha.meta_valor) * 100))
+
+    # 3. Projeção de Rendimentos Futuros (Juros Compostos baseados no CDI)
+    # Taxa CDI Mensal aproximada (0.85%) ajustada pelo % da caixinha
+    taxa_mensal = Decimal(0.0085) * (caixinha.meta_cdi / 100)
+    
+    projecoes = []
+    meses_alvo = [1, 3, 6, 12]
+    for m in meses_alvo:
+        saldo_projetado = caixinha.saldo_atual * ((1 + taxa_mensal) ** m)
+        lucro_estimado = saldo_projetado - caixinha.saldo_atual
+        projecoes.append({
+            'meses': m,
+            'total': saldo_projetado,
+            'lucro': lucro_estimado
+        })
+
+    # 4. Dados para o Gráfico de Crescimento Mês a Mês (Simulação histórica/futura)
+    # Vamos gerar uma linha mostrando a tendência de crescimento nos próximos 6 meses
+    labels_grafico = []
+    dados_grafico = []
+    hoje = timezone.now().date()
+    
+    for i in range(7):
+        data_futura = hoje + relativedelta(months=i)
+        labels_grafico.append(data_futura.strftime("%b/%y"))
+        dados_grafico.append(float(caixinha.saldo_atual * ((1 + taxa_mensal) ** i)))
+
+    context = {
+        'caixinha': caixinha,
+        'historico': historico,
+        'falta_para_meta': falta_para_meta,
+        'porcentagem_meta': porcentagem_meta,
+        'projecoes': projecoes,
+        'labels_grafico': labels_grafico,
+        'dados_grafico': dados_grafico,
+    }
+    return render(request, 'detalhes_caixinha.html', context)
+
 def novo_emprestimo_proprio(request):
     form = EmprestimoProprioForm(request.POST or None)
     if form.is_valid():
@@ -671,26 +721,33 @@ def pagar_gasto_fixo(request, id_fixo):
     ano = request.GET.get('ano', timezone.now().year)
     
     if request.method == 'POST':
-        valor_real = request.POST.get('valor_real')
+        valor_real = Decimal(request.POST.get('valor_real').replace(',', '.'))
         data_pagamento = request.POST.get('data_pagamento')
         
-        # LÓGICA NOVA AQUI:
-        # Se o gasto fixo está configurado como cartão, usamos o cartão dele.
         usar_cartao = gasto_fixo.eh_cartao
         cartao_escolhido = gasto_fixo.cartao if usar_cartao else None
         
-        Transacao.objects.create(
-            descricao=f"Pgto: {gasto_fixo.nome}",
-            valor_total=valor_real,
-            data_compra=data_pagamento,
-            gasto_fixo=gasto_fixo,
-            categoria=gasto_fixo.categoria,
+        # Pega a caixinha correta definida diretamente no cadastro do Gasto Recorrente!
+        caixinha_vinculada = gasto_fixo.caixinha_destino
+
+        with transaction.atomic():
+            # 1. Cria a transação apontando para a caixinha certa
+            Transacao.objects.create(
+                descricao=f"Pgto: {gasto_fixo.nome}",
+                valor_total=valor_real,
+                data_compra=data_pagamento,
+                gasto_fixo=gasto_fixo,
+                categoria=gasto_fixo.categoria,
+                eh_cartao=usar_cartao,
+                cartao=cartao_escolhido,
+                qtd_parcelas=1,
+                caixinha_destino=caixinha_vinculada
+            )
             
-            # Aqui definimos se vai pra fatura ou pro saldo
-            eh_cartao=usar_cartao,
-            cartao=cartao_escolhido,
-            qtd_parcelas=1 # Assinatura mensal é sempre 1x
-        )
+            # 2. Atualiza o saldo apenas se o gasto tiver uma caixinha vinculada
+            if caixinha_vinculada:
+                caixinha_vinculada.saldo_atual += valor_real
+                caixinha_vinculada.save()
         
         return redirect(f'/?mes={mes}&ano={ano}')
 

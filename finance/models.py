@@ -29,6 +29,7 @@ class Caixinha(models.Model):
     saldo_atual = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     meta_cdi = models.DecimalField(max_digits=5, decimal_places=2, default=102, help_text="% do CDI (Ex: 100, 102)")
     meta_valor = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Meta em R$ para esta caixinha (Opcional)")
+    descricao = models.TextField(null=True, blank=True, help_text="Para que serve esta caixinha? (Opcional)")
     
     def projecao_mes_seguinte(self):
         # Taxa CDI Mensal Aprox (0.85% ao mês)
@@ -63,9 +64,8 @@ class GastoFixo(models.Model):
     categoria = models.ForeignKey(Categoria, on_delete=models.SET_NULL, null=True, blank=True)
     eh_cartao = models.BooleanField(default=False)
     cartao = models.ForeignKey(CartaoCredito, on_delete=models.SET_NULL, null=True, blank=True)
-    
-    # Se for um pagamento de empréstimo próprio
     emprestimo_vinculado = models.ForeignKey(EmprestimoProprio, on_delete=models.SET_NULL, null=True, blank=True)
+    caixinha_destino = models.ForeignKey('Caixinha', on_delete=models.SET_NULL, null=True, blank=True, help_text="Se for um aporte, escolha a caixinha de destino")
 
 class Receita(models.Model):
     descricao = models.CharField(max_length=100)

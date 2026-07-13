@@ -58,15 +58,14 @@ class CategoriaForm(BootstrapModelForm):
 class GastoFixoForm(BootstrapModelForm):
     class Meta:
         model = GastoFixo
-        fields = ['nome', 'valor_previsto', 'dia_vencimento', 'categoria', 'eh_cartao', 'cartao']
+        fields = ['nome', 'valor_previsto', 'dia_vencimento', 'categoria', 'eh_cartao', 'cartao', 'caixinha_destino']
         widgets = {
              'nome': forms.TextInput(attrs={'placeholder': 'Ex: Netflix, Academia...'}),
              'dia_vencimento': forms.NumberInput(attrs={'max': 31, 'min': 1}),
              'categoria': forms.Select(attrs={'class': 'form-select'}),
-             
-             # AQUI ESTÁ A MUDANÇA: Adicionamos IDs para o JavaScript usar
              'eh_cartao': forms.CheckboxInput(attrs={'class': 'form-check-input', 'role': 'switch', 'id': 'check_cartao'}),
              'cartao': forms.Select(attrs={'class': 'form-select', 'id': 'campo_cartao'}),
+             'caixinha_destino': forms.Select(attrs={'class': 'form-select'}),
         }
 
 class SimulacaoForm(forms.Form):
@@ -86,10 +85,11 @@ class SetupInicialForm(forms.Form):
 class CaixinhaForm(BootstrapModelForm):
     class Meta:
         model = Caixinha
-        fields = ['nome', 'saldo_atual', 'meta_cdi', 'meta_valor'] # Adicionado 'meta_valor'
+        fields = ['nome', 'descricao', 'saldo_atual', 'meta_cdi', 'meta_valor']
         widgets = { 
             'nome': forms.TextInput(attrs={'placeholder': 'Ex: Reserva, Viagem...'}),
             'meta_valor': forms.NumberInput(attrs={'placeholder': 'Ex: 1500.00 (Opcional)', 'step': '0.01'}),
+            'descricao': forms.Textarea(attrs={'placeholder': 'Escreva aqui o objetivo ou regras dessa caixinha...', 'rows': 3}),
         }
 
 class EmprestimoProprioForm(BootstrapModelForm):
