@@ -557,28 +557,63 @@ def apagar_cartao(request, id):
 # --- 5. GERENCIAMENTO DE CATEGORIAS ---
 
 def gerenciar_categorias(request):
-    mes_atual = timezone.now().month
-    ano_atual = timezone.now().year
+    mes_url = request.GET.get('mes')
+    ano_url = request.GET.get('ano')
+    data_hoje = timezone.now().date()
+    
+    try:
+        if mes_url and ano_url:
+            mes_int = int(mes_url)
+            ano_int = int(ano_url)
+            
+            # Ajuste inteligente caso passe de 12 ou caia abaixo de 1
+            if mes_int > 12:
+                mes_int = 1
+                ano_int += 1
+            elif mes_int < 1:
+                mes_int = 12
+                ano_int -= 1
+                
+            data_ref = date(ano_int, mes_int, 1)
+        else:
+            data_ref = date(data_hoje.year, data_hoje.month, 1)
+            
+    except (ValueError, TypeError):
+        data_ref = date(data_hoje.year, data_hoje.month, 1)
 
-    # 1. Resumo do Planejamento
+    # Identifica o mês anterior e o próximo para gerar os links das setinhas
+    mes_anterior = data_ref - relativedelta(months=1)
+    proximo_mes = data_ref + relativedelta(months=1)
+
+    # --- RESUMO DO PLANEJAMENTO ---
     renda_fixa_total = ReceitaFixa.objects.aggregate(Sum('valor'))['valor__sum'] or 0
     categorias = Categoria.objects.all()
     total_planejado = categorias.aggregate(Sum('teto_mensal'))['teto_mensal__sum'] or 0
     sobra_prevista = renda_fixa_total - total_planejado
 
-    # 2. Detalhamento por Categoria (Gasto e Sobra Real)
+    # --- DETALHAMENTO POR CATEGORIA (MUDOU: FILTRA PELO MÊS SELECIONADO) ---
     categorias_com_detalhes = []
     for cat in categorias:
-        # Soma o que já foi gasto nesta categoria no mês atual (Débito + Cartão)
-        gasto_debito = Transacao.objects.filter(categoria=cat, eh_cartao=False, data_compra__month=mes_atual, data_compra__year=ano_atual).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
-        gasto_cartao = Parcela.objects.filter(transacao__categoria=cat, data_vencimento__month=mes_atual, data_vencimento__year=ano_atual).aggregate(Sum('valor'))['valor__sum'] or 0
+        # Soma o que já foi gasto nesta categoria no mês/ano selecionados
+        gasto_debito = Transacao.objects.filter(
+            categoria=cat, 
+            eh_cartao=False, 
+            data_compra__month=data_ref.month, 
+            data_compra__year=data_ref.year
+        ).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
+        
+        gasto_cartao = Parcela.objects.filter(
+            transacao__categoria=cat, 
+            data_vencimento__month=data_ref.month, 
+            data_vencimento__year=data_ref.year
+        ).aggregate(Sum('valor'))['valor__sum'] or 0
 
         fixos_cartao = GastoFixo.objects.filter(
             categoria=cat, 
             eh_cartao=True
         ).aggregate(Sum('valor_previsto'))['valor_previsto__sum'] or 0
         
-        # O Gasto Total agora soma os 3 (Débito + Parcelas do Cartão + Assinaturas do Cartão)
+        # O Gasto Total soma os 3 (Débito + Parcelas do Cartão + Assinaturas do Cartão) no mês selecionado
         gasto_total = gasto_debito + gasto_cartao + fixos_cartao
         
         sobra = cat.teto_mensal - gasto_total
@@ -595,12 +630,18 @@ def gerenciar_categorias(request):
     # Puxa as caixinhas para o Modal de guardar dinheiro
     caixinhas = Caixinha.objects.all()
 
+    # --- CONTEXTO COM AS VARIÁVEIS DE DATA PARA O HTML ---
     context = {
         'categorias': categorias_com_detalhes,
         'renda_fixa_total': renda_fixa_total,
         'total_planejado': total_planejado,
         'sobra_prevista': sobra_prevista,
-        'caixinhas': caixinhas
+        'caixinhas': caixinhas,
+        
+        # Variáveis novas do sistema de datas
+        'data_ref': data_ref,
+        'mes_ant_url': f"?mes={mes_anterior.month}&ano={mes_anterior.year}",
+        'prox_mes_url': f"?mes={proximo_mes.month}&ano={proximo_mes.year}",
     }
     return render(request, 'lista_categorias.html', context)
 
