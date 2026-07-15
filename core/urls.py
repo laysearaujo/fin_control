@@ -54,6 +54,7 @@ urlpatterns = [
 
     path('relatorios/categorias/', views.relatorio_categorias, name='relatorio_categorias'),
     path('relatorios/anual/', views.relatorio_anual, name='relatorio_anual'),
+    path('relatorios/categorias/detalhes/<int:categoria_id>/', views.detalhes_gastos_categoria, name='detalhes_gastos_categoria'),
 
     path('fatura/pagar/', views.pagar_fatura_mensal, name='pagar_fatura_mensal'),
     

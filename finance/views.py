@@ -845,22 +845,26 @@ def editar_transacao(request, id):
         if form.is_valid():
             transacao_salva = form.save()
             
-            # Se for uma compra no cartão, precisamos recriar as parcelas
-            if transacao_salva.eh_cartao:
+            # Se for uma compra no cartão, recria as parcelas usando a regra do cartão
+            if transacao_salva.eh_cartao and transacao_salva.cartao:
                 # 1. Apaga as parcelas antigas vinculadas a esta transação
                 Parcela.objects.filter(transacao=transacao_salva).delete()
                 
                 # 2. Calcula o novo valor de cada parcela
                 valor_parcela = transacao_salva.valor_total / transacao_salva.qtd_parcelas
                 
-                # 3. Cria as novas parcelas
+                # 3. Cria as novas parcelas respeitando o fechamento da fatura
+                data_base = transacao_salva.data_compra
                 for i in range(transacao_salva.qtd_parcelas):
+                    data_parcela_atual = data_base + relativedelta(months=i)
+                    # === CORREÇÃO AQUI: Usa a regra real do vencimento do cartão ===
+                    data_vencimento_real = transacao_salva.cartao.get_data_vencimento_real(data_parcela_atual)
+                    
                     Parcela.objects.create(
                         transacao=transacao_salva,
                         numero_parcela=i + 1,
                         valor=valor_parcela,
-                        # A data de vencimento avança 1 mês para cada parcela
-                        data_vencimento=transacao_salva.data_compra + relativedelta(months=i)
+                        data_vencimento=data_vencimento_real
                     )
             
             return redirect('extrato')
@@ -879,18 +883,47 @@ def apagar_transacao(request, id):
     return redirect(request.META.get('HTTP_REFERER', '/'))
 
 def relatorio_categorias(request):
-    """Gera dados para o gráfico de pizza"""
+    """Gera dados para o gráfico de pizza de qualquer mês selecionado"""
     # Define o mês (Padrão: Atual)
-    mes = int(request.GET.get('mes', timezone.now().month))
-    ano = int(request.GET.get('ano', timezone.now().year))
+    mes_url = request.GET.get('mes')
+    ano_url = request.GET.get('ano')
+    data_hoje = timezone.now().date()
     
+    try:
+        if mes_url and ano_url:
+            mes = int(mes_url)
+            ano = int(ano_url)
+            
+            # Ajuste inteligente caso passe de 12 ou caia abaixo de 1
+            if mes > 12:
+                mes = 1
+                ano += 1
+            elif mes < 1:
+                mes = 12
+                ano -= 1
+                
+            data_ref = date(ano, mes, 1)
+        else:
+            mes = data_hoje.month
+            ano = data_hoje.year
+            data_ref = date(ano, mes, 1)
+            
+    except (ValueError, TypeError):
+        mes = data_hoje.month
+        ano = data_hoje.year
+        data_ref = date(ano, mes, 1)
+
+    # Identifica o mês anterior e o próximo para gerar os links das setinhas
+    mes_anterior = data_ref - relativedelta(months=1)
+    proximo_mes = data_ref + relativedelta(months=1)
+
     # 1. Gastos via Débito/Dinheiro (IGNORANDO O PAGAMENTO DA FATURA!)
     gastos_avulsos = Transacao.objects.filter(
         eh_cartao=False, 
-        eh_pagamento_fatura=False, # <--- A MÁGICA QUE TIRA A DUPLICAÇÃO AQUI
+        eh_pagamento_fatura=False,
         data_compra__month=mes, 
         data_compra__year=ano
-    ).values('categoria__nome').annotate(total=Sum('valor_total'))
+    ).values('categoria__id', 'categoria__nome').annotate(total=Sum('valor_total'))
 
     # 2. Gastos via Cartão (Parcelas que caem neste mês)
     parcelas = Parcela.objects.filter(
@@ -898,34 +931,64 @@ def relatorio_categorias(request):
         data_vencimento__year=ano
     ).select_related('transacao__categoria')
 
-    # 3. Assinaturas e Fixos no Cartão (Para os streamings aparecerem no gráfico!)
+    # 3. Assinaturas e Fixos no Cartão
     fixos_cartao = GastoFixo.objects.filter(eh_cartao=True).select_related('categoria')
 
-    dados_finais = {} # Ex: {'Mercado': 500, 'Lazer': 200}
+    dados_finais = {}
 
     # Soma os avulsos
     for g in gastos_avulsos:
         nome = g['categoria__nome'] or 'Sem Categoria'
-        dados_finais[nome] = dados_finais.get(nome, 0) + float(g['total'] or 0)
+        cat_id = g['categoria__id'] or None
+        
+        if nome not in dados_finais:
+            dados_finais[nome] = [0.0, cat_id]
+        dados_finais[nome][0] += float(g['total'] or 0)
 
     # Soma as parcelas de cartão
     for p in parcelas:
         nome = p.transacao.categoria.nome if p.transacao.categoria else 'Sem Categoria'
-        dados_finais[nome] = dados_finais.get(nome, 0) + float(p.valor or 0)
+        cat_id = p.transacao.categoria.id if p.transacao.categoria else None
+        
+        if nome not in dados_finais:
+            dados_finais[nome] = [0.0, cat_id]
+        dados_finais[nome][0] += float(p.valor or 0)
 
     # Soma as assinaturas do cartão
     for f in fixos_cartao:
         nome = f.categoria.nome if f.categoria else 'Sem Categoria'
-        dados_finais[nome] = dados_finais.get(nome, 0) + float(f.valor_previsto or 0)
+        cat_id = f.categoria.id if f.categoria else None
+        
+        if nome not in dados_finais:
+            dados_finais[nome] = [0.0, cat_id]
+        dados_finais[nome][0] += float(f.valor_previsto or 0)
 
-    # Prepara para o Chart.js
-    labels = list(dados_finais.keys())
-    valores = list(dados_finais.values())
+    # Ordena o dicionário pelo valor de forma decrescente (mais caro para o mais barato)
+    dados_ordenados = sorted(
+        dados_finais.items(), 
+        key=lambda item: item[1][0], 
+        reverse=True
+    )
+
+    # Prepara as listas para o Chart.js e HTML com os dados já ordenados
+    labels = []
+    valores = []
+    ids_categorias = []
+
+    for nome, dados in dados_ordenados:
+        labels.append(nome)
+        valores.append(dados[0])
+        ids_categorias.append(dados[1])
 
     return render(request, 'relatorio_categorias.html', {
-        'mes': mes, 'ano': ano,
+        'mes': mes, 
+        'ano': ano,
+        'data_ref': data_ref,
+        'mes_ant_url': f"?mes={mes_anterior.month}&ano={mes_anterior.year}",
+        'prox_mes_url': f"?mes={proximo_mes.month}&ano={proximo_mes.year}",
         'labels': labels, 
-        'data': valores
+        'data': valores,
+        'ids_categorias': ids_categorias
     })
 
 def relatorio_anual(request):
@@ -997,6 +1060,73 @@ def relatorio_anual(request):
         })
 
     return render(request, 'relatorio_anual.html', {'ano': ano, 'grid': grid_meses})
+
+def detalhes_gastos_categoria(request, categoria_id):
+    categoria = get_object_or_404(Categoria, id=categoria_id)
+    
+    # Recupera o mês e ano da URL ou usa o atual como padrão
+    mes = int(request.GET.get('mes', timezone.now().month))
+    ano = int(request.GET.get('ano', timezone.now().year))
+    
+    detalhes_gastos = []
+    
+    # 1. Busca transações no débito/dinheiro desta categoria no mês
+    transacoes_debito = Transacao.objects.filter(
+        categoria=categoria,
+        eh_cartao=False,
+        eh_pagamento_fatura=False,
+        data_compra__month=mes,
+        data_compra__year=ano
+    )
+    for t in transacoes_debito:
+        detalhes_gastos.append({
+            'data': t.data_compra,
+            'descricao': t.descricao,
+            'valor': t.valor_total,
+            'tipo': 'Débito / PIX'
+        })
+        
+    # 2. Busca parcelas de cartão desta categoria que vencem no mês
+    parcelas_cartao = Parcela.objects.filter(
+        transacao__categoria=categoria,
+        data_vencimento__month=mes,
+        data_vencimento__year=ano
+    ).select_related('transacao')
+    for p in parcelas_cartao:
+        detalhes_gastos.append({
+            'data': p.data_vencimento,
+            'descricao': f"{p.transacao.descricao} ({p.numero_parcela}/{p.transacao.qtd_parcelas})",
+            'valor': p.valor,
+            'tipo': f"Cartão de Crédito"
+        })
+        
+    # 3. Busca gastos fixos (assinaturas) no cartão vinculados a essa categoria
+    fixos_cartao = GastoFixo.objects.filter(
+        categoria=categoria,
+        eh_cartao=True
+    )
+    for f in fixos_cartao:
+        # Apenas adicionamos se o gasto fixo teoricamente ocorre no mês de análise
+        detalhes_gastos.append({
+            'data': date(ano, mes, f.dia_vencimento),
+            'descricao': f"{f.nome} (Assinatura)",
+            'valor': f.valor_previsto,
+            'tipo': "Cartão (Recorrente)"
+        })
+        
+    # Ordena os gastos por data (mais recentes primeiro)
+    detalhes_gastos.sort(key=lambda x: x['data'], reverse=True)
+    
+    total_gasto = sum(item['valor'] for item in detalhes_gastos)
+    
+    context = {
+        'categoria': categoria,
+        'gastos': detalhes_gastos,
+        'total': total_gasto,
+        'mes': mes,
+        'ano': ano,
+    }
+    return render(request, 'detalhes_gastos_categoria.html', context)
 
 def pagar_fatura_mensal(request):
     # Pega o mês/ano da URL ou usa o atual
