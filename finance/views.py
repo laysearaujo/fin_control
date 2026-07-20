@@ -883,8 +883,7 @@ def apagar_transacao(request, id):
     return redirect(request.META.get('HTTP_REFERER', '/'))
 
 def relatorio_categorias(request):
-    """Gera dados para o gráfico de pizza de qualquer mês selecionado"""
-    # Define o mês (Padrão: Atual)
+    """Gera dados para o gráfico de pizza filtrando o custo de vida real"""
     mes_url = request.GET.get('mes')
     ano_url = request.GET.get('ano')
     data_hoje = timezone.now().date()
@@ -893,31 +892,22 @@ def relatorio_categorias(request):
         if mes_url and ano_url:
             mes = int(mes_url)
             ano = int(ano_url)
-            
-            # Ajuste inteligente caso passe de 12 ou caia abaixo de 1
-            if mes > 12:
-                mes = 1
-                ano += 1
-            elif mes < 1:
-                mes = 12
-                ano -= 1
-                
+            if mes > 12: mes = 1; ano += 1
+            elif mes < 1: mes = 12; ano -= 1
             data_ref = date(ano, mes, 1)
         else:
             mes = data_hoje.month
             ano = data_hoje.year
             data_ref = date(ano, mes, 1)
-            
     except (ValueError, TypeError):
         mes = data_hoje.month
         ano = data_hoje.year
         data_ref = date(ano, mes, 1)
 
-    # Identifica o mês anterior e o próximo para gerar os links das setinhas
     mes_anterior = data_ref - relativedelta(months=1)
     proximo_mes = data_ref + relativedelta(months=1)
 
-    # 1. Gastos via Débito/Dinheiro (IGNORANDO O PAGAMENTO DA FATURA!)
+    # 1. Gastos via Débito/Dinheiro (Ignorando pagamento de fatura)
     gastos_avulsos = Transacao.objects.filter(
         eh_cartao=False, 
         eh_pagamento_fatura=False,
@@ -925,7 +915,7 @@ def relatorio_categorias(request):
         data_compra__year=ano
     ).values('categoria__id', 'categoria__nome').annotate(total=Sum('valor_total'))
 
-    # 2. Gastos via Cartão (Parcelas que caem neste mês)
+    # 2. Gastos via Cartão (Parcelas do mês)
     parcelas = Parcela.objects.filter(
         data_vencimento__month=mes,
         data_vencimento__year=ano
@@ -936,45 +926,48 @@ def relatorio_categorias(request):
 
     dados_finais = {}
 
-    # Soma os avulsos
     for g in gastos_avulsos:
         nome = g['categoria__nome'] or 'Sem Categoria'
         cat_id = g['categoria__id'] or None
-        
-        if nome not in dados_finais:
-            dados_finais[nome] = [0.0, cat_id]
+        if nome not in dados_finais: dados_finais[nome] = [0.0, cat_id]
         dados_finais[nome][0] += float(g['total'] or 0)
 
-    # Soma as parcelas de cartão
     for p in parcelas:
         nome = p.transacao.categoria.nome if p.transacao.categoria else 'Sem Categoria'
         cat_id = p.transacao.categoria.id if p.transacao.categoria else None
-        
-        if nome not in dados_finais:
-            dados_finais[nome] = [0.0, cat_id]
+        if nome not in dados_finais: dados_finais[nome] = [0.0, cat_id]
         dados_finais[nome][0] += float(p.valor or 0)
 
-    # Soma as assinaturas do cartão
     for f in fixos_cartao:
         nome = f.categoria.nome if f.categoria else 'Sem Categoria'
         cat_id = f.categoria.id if f.categoria else None
-        
-        if nome not in dados_finais:
-            dados_finais[nome] = [0.0, cat_id]
+        if nome not in dados_finais: dados_finais[nome] = [0.0, cat_id]
         dados_finais[nome][0] += float(f.valor_previsto or 0)
 
-    # Ordena o dicionário pelo valor de forma decrescente (mais caro para o mais barato)
-    dados_ordenados = sorted(
-        dados_finais.items(), 
-        key=lambda item: item[1][0], 
-        reverse=True
-    )
+    # === CÁLCULO DO CUSTO REAL VS APORTES (CORRIGIDO) ===
+    total_geral_saidas = 0.0
+    total_aportes_investimentos = 0.0
 
-    # Prepara as listas para o Chart.js e HTML com os dados já ordenados
+    # Palavras-chave que indicam que a categoria é um investimento/aporte
+    palavras_chave_aportes = ['aporte', 'investimento', 'poupança', 'caixinha', 'reserva']
+
+    for nome, dados in dados_finais.items():
+        valor_gasto = dados[0]
+        total_geral_saidas += valor_gasto
+        
+        # Converte o nome para minúsculo e verifica se contém alguma das palavras-chave
+        nome_minusculo = nome.lower()
+        if any(palavra in nome_minusculo for palavra in palavras_chave_aportes):
+            total_aportes_investimentos += valor_gasto
+
+    custo_mensal_real = total_geral_saidas - total_aportes_investimentos
+
+    # Ordena o gráfico/lista de forma decrescente
+    dados_ordenados = sorted(dados_finais.items(), key=lambda item: item[1][0], reverse=True)
+
     labels = []
     valores = []
     ids_categorias = []
-
     for nome, dados in dados_ordenados:
         labels.append(nome)
         valores.append(dados[0])
@@ -988,7 +981,9 @@ def relatorio_categorias(request):
         'prox_mes_url': f"?mes={proximo_mes.month}&ano={proximo_mes.year}",
         'labels': labels, 
         'data': valores,
-        'ids_categorias': ids_categorias
+        'ids_categorias': ids_categorias,
+        'custo_mensal_real': custo_mensal_real,
+        'total_aportes': total_aportes_investimentos
     })
 
 def relatorio_anual(request):
