@@ -1,128 +1,224 @@
 {% extends 'base.html' %}
 
 {% block content %}
+<div class="container-fluid py-3">
 
-<div class="card border-0 shadow-sm rounded-4 mb-4">
-    <div class="card-body d-flex justify-content-between align-items-center py-2 px-3">
-        <a href="{{ mes_ant_url }}" class="btn btn-light rounded-circle border" title="Mês Anterior" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
-            <span class="fs-5">&laquo;</span>
-        </a>
-        
-        <div class="text-center d-flex flex-column align-items-center">
-            <h3 class="fw-bold m-0 text-capitalize text-dark">{{ data_ref|date:"F Y" }}</h3>
-            <span class="badge rounded-pill bg-dark fw-normal mt-1 px-3">Análise de Gastos por Categoria</span>
-        </div>
-        
-        <a href="{{ prox_mes_url }}" class="btn btn-light rounded-circle border" title="Próximo Mês" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
-            <span class="fs-5">&raquo;</span>
-        </a>
-    </div>
-</div>
-
-<div class="row justify-content-center">
-    <div class="col-md-6">
-        <div class="card card-custom p-4 shadow-sm">
-            <canvas id="graficoPizza" style="cursor: pointer;"></canvas>
+    <!-- BARRA SUPERIOR DE NAVEGAÇÃO -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white">
+        <div class="card-body d-flex justify-content-between align-items-center py-2 px-3">
+            <a href="{{ mes_ant_url }}" class="btn btn-light rounded-circle border" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                <span class="fs-5 fw-bold">&laquo;</span>
+            </a>
+            <div class="text-center">
+                <h3 class="fw-bold m-0 text-capitalize text-dark">{{ data_ref|date:"F Y" }}</h3>
+                <span class="badge rounded-pill bg-dark fw-normal mt-1 px-3">Painel Estratégico Financeiro</span>
+            </div>
+            <a href="{{ prox_mes_url }}" class="btn btn-light rounded-circle border" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+                <span class="fs-5 fw-bold">&raquo;</span>
+            </a>
         </div>
     </div>
-    
-    <div class="col-md-4">
-        <div class="card card-custom p-4 shadow-sm h-100">
-            <div class="d-flex justify-content-between align-items-start mb-3 border-bottom pb-2">
-                <h5 class="fw-bold m-0">Detalhes</h5>
-                <div class="text-end">
-                    <!-- O Total Geral (Tudo o que está no gráfico) -->
-                    <span class="text-dark small fw-bold d-block" id="total-detalhes"></span>
-                    <!-- O Custo Real calculado (Sem os aportes) -->
-                    <span class="text-secondary fw-semibold d-block" style="font-size: 0.8rem;">
-                        Custo Real de Vida: R$ {{ custo_mensal_real|floatformat:2 }}
-                    </span>
+
+    <!-- HISTÓRICO DE ENTRADAS VS SAÍDAS -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+                <h5 class="fw-bold text-dark mb-1">📊 Saúde Financeira Histórica</h5>
+                <p class="text-muted small mb-3">Sua linha vermelha de custos reais deve andar sempre abaixo da linha verde de entradas.</p>
+                <div style="position: relative; height: 260px;">
+                    <canvas id="graficoHistorico"></canvas>
                 </div>
             </div>
-            <ul class="list-group list-group-flush" id="lista-detalhes">
-                </ul>
+        </div>
+    </div>
+
+    <!-- OS DOIS GRÁFICOS DE PIZZA (CUSTOS VS APORTES) -->
+    <div class="row g-4 mb-4">
+        <!-- Gráfico de Custos de Vida Reais -->
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm rounded-4 p-4 bg-white h-100">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <h5 class="fw-bold text-dark m-0">🍕 Custo Real por Categoria</h5>
+                        <small class="text-muted">Apenas gastos de consumo e estilo de vida</small>
+                    </div>
+                    <span class="badge bg-danger fs-6 px-3 rounded-pill">R$ {{ custo_mensal_real|floatformat:2 }}</span>
+                </div>
+                <div style="position: relative; height: 260px;">
+                    <canvas id="graficoPizzaDespesas"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gráfico de Aportes/Investimentos -->
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm rounded-4 p-4 bg-white h-100">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <h5 class="fw-bold text-dark m-0">🌱 Alocação de Aportes</h5>
+                        <small class="text-muted">Destinação do dinheiro guardado e caixinhas</small>
+                    </div>
+                    <span class="badge bg-success fs-6 px-3 rounded-pill">R$ {{ total_aportes|floatformat:2 }}</span>
+                </div>
+                <div style="position: relative; height: 260px;">
+                    <canvas id="graficoPizzaAportes"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SEMÁFORO DE 3 MESES E RESERVA DE EMERGÊNCIA -->
+    <div class="row g-4">
+        <!-- Semáforo de 3 Meses -->
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm rounded-4 p-4 bg-white h-100">
+                <h5 class="fw-bold text-dark mb-1">🚥 Semáforo Temporal de Fluxo de Caixa</h5>
+                <p class="text-muted small mb-3">Clique em qualquer linha para navegar diretamente para a análise daquele mês completo.</p>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0 text-center border-top">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="text-start ps-3 small text-uppercase text-secondary">Período de Análise</th>
+                                <th class="small text-uppercase text-secondary">Entradas</th>
+                                <th class="small text-uppercase text-secondary">Custo Real</th>
+                                <th class="small text-uppercase text-secondary">Aportes</th>
+                                <th class="small text-uppercase text-secondary">Sobra Líquida</th>
+                                <th class="text-end pe-3 small text-uppercase text-secondary">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for linha in semaforo_dados %}
+                            <tr onclick="window.location.href='?mes={{ linha.mes }}&ano={{ linha.ano }}';" style="cursor: pointer;">
+                                <td class="text-start ps-3 fw-bold text-dark">📅 {{ linha.label }}</td>
+                                <td class="text-success fw-semibold">R$ {{ linha.entradas|floatformat:2 }}</td>
+                                <td class="text-danger">R$ {{ linha.custo_real|floatformat:2 }}</td>
+                                <td class="text-primary">R$ {{ linha.aportes|floatformat:2 }}</td>
+                                <td class="{% if linha.sobra < 0 %}text-danger fw-bold{% else %}text-dark{% endif %}">
+                                    R$ {{ linha.sobra|floatformat:2 }}
+                                </td>
+                                <td class="text-end pe-3">
+                                    <span class="{{ linha.cor }}">{{ linha.status }}</span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Painel de Reserva de Emergência Real -->
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm rounded-4 p-4 bg-white h-100">
+                <h5 class="fw-bold text-dark mb-3">🛡️ Reserva de Emergência</h5>
+                
+                <div class="mb-3">
+                    <small class="text-muted d-block fw-bold text-uppercase" style="font-size: 0.65rem;">Custo Médio de Vida Histórico</small>
+                    <h4 class="fw-bold text-dark m-0">R$ {{ media_custo_vida|floatformat:2 }}</h4>
+                </div>
+                
+                <hr class="text-muted my-2">
+                
+                <div class="row g-2 text-center mb-3">
+                    <div class="col-6 border-end">
+                        <small class="text-muted d-block" style="font-size: 0.7rem;">Mínimo (6 Meses)</small>
+                        <span class="fw-bold text-warning small">R$ {{ reserva_minima|floatformat:2 }}</span>
+                    </div>
+                    <div class="col-6">
+                        <small class="text-muted d-block" style="font-size: 0.7rem;">Ideal (12 Meses)</small>
+                        <span class="fw-bold text-success small">R$ {{ reserva_ideal|floatformat:2 }}</span>
+                    </div>
+                </div>
+
+                <!-- Procure o bloco "Painel de Reserva de Emergência Real" no seu HTML e altere o rodapé cinza para: -->
+                <div class="bg-light rounded-4 p-3 text-center border">
+                    <small class="text-muted d-block fw-semibold" style="font-size: 0.75rem;">Saldo na Caixinha de Emergência</small>
+                    <!-- Alterado para exibir a variável corrigida do Django -->
+                    <h3 class="fw-bold text-primary my-1">R$ {{ saldo_caixinhas|floatformat:2 }}</h3>
+                    
+                    <div class="progress mt-2" style="height: 10px;">
+                        <div class="progress-bar bg-success progress-bar-striped progress-bar-animated" role="progressbar" style="width: {{ progresso_reserva }}%"></div>
+                    </div>
+                    <small class="text-success fw-bold d-block mt-1" style="font-size: 0.75rem;">{{ progresso_reserva }}% da Meta Ideal Alcançada</small>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    const categorias = {{ labels|safe }};
-    const valores = {{ data|safe }};
-    const idsCategorias = {{ ids_categorias|safe }}; // IDs recebidos da view
+    // Parâmetros recebidos do Django
+    const labelsDespesas = {{ labels|safe }};
+    const valoresDespesas = {{ data|safe }};
+    const idsDespesas = {{ ids_categorias|safe }};
+    
+    const labelsAportes = {{ labels_aportes|safe }};
+    const valoresAportes = {{ valores_aportes|safe }};
+
+    const labelsHistorico = {{ labels_historico|safe }};
+    const entradasHistorico = {{ entradas_historico|safe }};
+    const saidasHistorico = {{ saidas_historico|safe }};
+
     const mes = "{{ mes }}";
     const ano = "{{ ano }}";
-    
-    const paletaCores = [
-        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#C9CBCF', 
-        '#2ECC71', '#E74C3C', '#34495E', '#1ABC9C', '#9B59B6', '#E67E22', '#16A085'
-    ];
 
-    const totalGeral = valores.reduce((a, b) => a + b, 0);
-    document.getElementById('total-detalhes').innerText = `Total: R$ ${totalGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const coresGastos = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#8E44AD', '#34495E', '#16A085'];
+    const coresAportes = ['#2ECC71', '#27AE60', '#1ABC9C', '#16A085', '#2C3E50'];
 
-    // Cria a lista lateral com links clicáveis para abrir o detalhamento
-    const listaDetalhes = document.getElementById('lista-detalhes');
-    categorias.forEach((label, index) => {
-        const valor = valores[index] !== undefined ? valores[index] : 0;
-        const corDaCategoria = paletaCores[index % paletaCores.length];
-        const catId = idsCategorias[index];
-        
-        const li = document.createElement('li');
-        li.className = 'list-group-item d-flex justify-content-between align-items-center fw-semibold text-secondary';
-        
-        // Se a categoria tiver um ID válido, criamos um link de redirecionamento
-        if (catId) {
-            li.innerHTML = `
-                <a href="/relatorios/categorias/detalhes/${catId}/?mes=${mes}&ano=${ano}" class="text-decoration-none text-secondary hover-link">
-                    <span>📁 ${label}</span>
-                </a>
-                <span class="badge rounded-pill text-white" style="background-color: ${corDaCategoria}; font-size: 0.9rem;">
-                    R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-            `;
-        } else {
-            li.innerHTML = `
-                <span>${label}</span>
-                <span class="badge rounded-pill text-white" style="background-color: ${corDaCategoria}; font-size: 0.9rem;">
-                    R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </span>
-            `;
-        }
-        listaDetalhes.appendChild(li);
-    });
-
-    const ctx = document.getElementById('graficoPizza');
-    const meuGrafico = new Chart(ctx, {
-        type: 'doughnut',
+    // 1. GRÁFICO HISTÓRICO DE LINHAS
+    new Chart(document.getElementById('graficoHistorico').getContext('2d'), {
+        type: 'line',
         data: {
-            labels: categorias,
-            datasets: [{
-                data: valores,
-                backgroundColor: paletaCores,
-                borderWidth: 1
-            }]
+            labels: labelsHistorico,
+            datasets: [
+                {
+                    label: 'Entradas Reais (Salários)',
+                    data: entradasHistorico,
+                    borderColor: '#2ECC71',
+                    backgroundColor: 'rgba(46, 204, 113, 0.05)',
+                    borderWidth: 3,
+                    tension: 0.25,
+                    fill: true
+                },
+                {
+                    label: 'Saídas Reais (Custo de Vida)',
+                    data: saidasHistorico,
+                    borderColor: '#E74C3C',
+                    backgroundColor: 'rgba(231, 76, 60, 0.05)',
+                    borderWidth: 3,
+                    tension: 0.25,
+                    fill: true
+                }
+            ]
         },
         options: {
             responsive: true,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const valorAtual = context.parsed;
-                            const porcentagem = totalGeral > 0 ? ((valorAtual / totalGeral) * 100).toFixed(1) : 0;
-                            return ` R$ ${valorAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${porcentagem}%)`;
-                        }
-                    }
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { callback: function(value) { return 'R$ ' + value.toLocaleString('pt-BR'); } }
                 }
-            },
-            // AÇÃO AO CLICAR NA FATIA DO GRÁFICO:
+            }
+        }
+    });
+
+    // 2. PIZZA CUSTOS DE VIDA REAIS
+    new Chart(document.getElementById('graficoPizzaDespesas').getContext('2d'), {
+        type: 'doughnut',
+        data: {
+            labels: labelsDespesas,
+            datasets: [{ data: valoresDespesas, backgroundColor: coresGastos, borderWidth: 1 }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
             onClick: (evt, activeElements) => {
                 if (activeElements.length > 0) {
-                    const firstPoint = activeElements[0];
-                    const index = firstPoint.index;
-                    const catId = idsCategorias[index];
+                    const idx = activeElements[0].index;
+                    const catId = idsDespesas[idx];
                     if (catId) {
                         window.location.href = `/relatorios/categorias/detalhes/${catId}/?mes=${mes}&ano=${ano}`;
                     }
@@ -130,12 +226,19 @@
             }
         }
     });
-</script>
 
-<style>
-    .hover-link:hover {
-        color: #000 !important;
-        text-decoration: underline !important;
-    }
-</style>
+    // 3. PIZZA EXCLUSIVO DE APORTES
+    new Chart(document.getElementById('graficoPizzaAportes').getContext('2d'), {
+        type: 'doughnut',
+        data: {
+            labels: labelsAportes,
+            datasets: [{ data: valoresAportes, backgroundColor: coresAportes, borderWidth: 1 }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } }
+        }
+    });
+</script>
 {% endblock %}

@@ -883,7 +883,7 @@ def apagar_transacao(request, id):
     return redirect(request.META.get('HTTP_REFERER', '/'))
 
 def relatorio_categorias(request):
-    """Gera dados para o gráfico de pizza filtrando o custo de vida real"""
+    """Gera a Super Tela Única de Análise Estratégica com múltiplos gráficos e Semáforo de 3 Meses"""
     mes_url = request.GET.get('mes')
     ano_url = request.GET.get('ano')
     data_hoje = timezone.now().date()
@@ -892,8 +892,12 @@ def relatorio_categorias(request):
         if mes_url and ano_url:
             mes = int(mes_url)
             ano = int(ano_url)
-            if mes > 12: mes = 1; ano += 1
-            elif mes < 1: mes = 12; ano -= 1
+            if mes > 12:
+                mes = 1
+                ano += 1
+            elif mes < 1:
+                mes = 12
+                ano -= 1
             data_ref = date(ano, mes, 1)
         else:
             mes = data_hoje.month
@@ -904,24 +908,81 @@ def relatorio_categorias(request):
         ano = data_hoje.year
         data_ref = date(ano, mes, 1)
 
-    mes_anterior = data_ref - relativedelta(months=1)
-    proximo_mes = data_ref + relativedelta(months=1)
+    mes_anterior_url = data_ref - relativedelta(months=1)
+    proximo_mes_url = data_ref + relativedelta(months=1)
 
-    # 1. Gastos via Débito/Dinheiro (Ignorando pagamento de fatura)
+    palavras_chave_aportes = ['aporte', 'investimento', 'poupança', 'caixinha', 'reserva']
+
+    # ==========================================
+    # 1. FUNÇÃO INTERNA PARA CALCULAR UM MÊS ISOLADO
+    # ==========================================
+    def calcular_dados_mes(m, a):
+        # Verifica se o mês possui alguma movimentação real (Débito ou Cartão)
+        tem_movimentacao_real = Transacao.objects.filter(
+            data_compra__month=m, data_compra__year=a
+        ).exists() or Parcela.objects.filter(
+            data_vencimento__month=m, data_vencimento__year=a
+        ).exists()
+
+        avulsos = Transacao.objects.filter(
+            eh_cartao=False, eh_pagamento_fatura=False, data_compra__month=m, data_compra__year=a
+        ).aggregate(t=Sum('valor_total'))['t'] or 0.0
+        
+        parc = Parcela.objects.filter(
+            data_vencimento__month=m, data_vencimento__year=a
+        ).aggregate(t=Sum('valor'))['t'] or 0.0
+        
+        # SÓ SOMA OS GASTOS FIXOS SE O MÊS TIVER MOVIMENTAÇÃO REAL!
+        # Isso impede que assinaturas vazem para meses passados onde o app não era usado.
+        if tem_movimentacao_real:
+            fixos = GastoFixo.objects.filter(eh_cartao=True).aggregate(t=Sum('valor_previsto'))['t'] or 0.0
+        else:
+            fixos = 0.0
+        
+        total_geral = float(avulsos) + float(parc) + float(fixos)
+        
+        # Filtro de Aportes do mês específico
+        aportes = 0.0
+        if tem_movimentacao_real:
+            avulsos_ap = Transacao.objects.filter(
+                eh_cartao=False, eh_pagamento_fatura=False, data_compra__month=m, data_compra__year=a
+            ).select_related('categoria')
+            
+            parc_ap = Parcela.objects.filter(
+                data_vencimento__month=m, data_vencimento__year=a
+            ).select_related('transacao__categoria')
+            
+            fixos_ap = GastoFixo.objects.filter(eh_cartao=True).select_related('categoria')
+            
+            for g in avulsos_ap:
+                nome_c = g.categoria.nome if g.categoria else 'Sem Categoria'
+                if any(p in nome_c.lower() for p in palavras_chave_aportes):
+                    aportes += float(g.valor_total or 0)
+                    
+            for p in parc_ap:
+                nome_c = p.transacao.categoria.nome if p.transacao.categoria else 'Sem Categoria'
+                if any(p_c in nome_c.lower() for p_c in palavras_chave_aportes):
+                    aportes += float(p.valor or 0)
+                    
+            for f in fixos_ap:
+                nome_c = f.categoria.nome if f.categoria else 'Sem Categoria'
+                if any(p_c in nome_c.lower() for p_c in palavras_chave_aportes):
+                    aportes += float(f.valor_previsto or 0)
+                    
+        custo_real = total_geral - aportes
+        return total_geral, aportes, custo_real
+
+    # ==========================================
+    # 2. DADOS DO MÊS SELECIONADO (PIZZA E APORTES)
+    # ==========================================
     gastos_avulsos = Transacao.objects.filter(
-        eh_cartao=False, 
-        eh_pagamento_fatura=False,
-        data_compra__month=mes, 
-        data_compra__year=ano
+        eh_cartao=False, eh_pagamento_fatura=False, data_compra__month=mes, data_compra__year=ano
     ).values('categoria__id', 'categoria__nome').annotate(total=Sum('valor_total'))
 
-    # 2. Gastos via Cartão (Parcelas do mês)
     parcelas = Parcela.objects.filter(
-        data_vencimento__month=mes,
-        data_vencimento__year=ano
+        data_vencimento__month=mes, data_vencimento__year=ano
     ).select_related('transacao__categoria')
 
-    # 3. Assinaturas e Fixos no Cartão
     fixos_cartao = GastoFixo.objects.filter(eh_cartao=True).select_related('categoria')
 
     dados_finais = {}
@@ -944,47 +1005,150 @@ def relatorio_categorias(request):
         if nome not in dados_finais: dados_finais[nome] = [0.0, cat_id]
         dados_finais[nome][0] += float(f.valor_previsto or 0)
 
-    # === CÁLCULO DO CUSTO REAL VS APORTES (CORRIGIDO) ===
-    total_geral_saidas = 0.0
-    total_aportes_investimentos = 0.0
+    # Separa despesas puras de investimentos para os dois gráficos de pizza
+    total_geral_saidas, total_aportes_mes, custo_mensal_real_atual = calcular_dados_mes(mes, ano)
 
-    # Palavras-chave que indicam que a categoria é um investimento/aporte
-    palavras_chave_aportes = ['aporte', 'investimento', 'poupança', 'caixinha', 'reserva']
-
-    for nome, dados in dados_finais.items():
-        valor_gasto = dados[0]
-        total_geral_saidas += valor_gasto
-        
-        # Converte o nome para minúsculo e verifica se contém alguma das palavras-chave
-        nome_minusculo = nome.lower()
-        if any(palavra in nome_minusculo for palavra in palavras_chave_aportes):
-            total_aportes_investimentos += valor_gasto
-
-    custo_mensal_real = total_geral_saidas - total_aportes_investimentos
-
-    # Ordena o gráfico/lista de forma decrescente
+    # Ordena o dicionário pelo valor de forma decrescente para a listagem lateral ficar bonita
     dados_ordenados = sorted(dados_finais.items(), key=lambda item: item[1][0], reverse=True)
 
-    labels = []
-    valores = []
-    ids_categorias = []
-    for nome, dados in dados_ordenados:
-        labels.append(nome)
-        valores.append(dados[0])
-        ids_categorias.append(dados[1])
+    labels_despesas = []
+    valores_despesas = []
+    ids_despesas = []
+    
+    labels_aportes = []
+    valores_aportes = []
 
-    return render(request, 'relatorio_categorias.html', {
-        'mes': mes, 
-        'ano': ano,
-        'data_ref': data_ref,
-        'mes_ant_url': f"?mes={mes_anterior.month}&ano={mes_anterior.year}",
-        'prox_mes_url': f"?mes={proximo_mes.month}&ano={proximo_mes.year}",
-        'labels': labels, 
-        'data': valores,
-        'ids_categorias': ids_categorias,
-        'custo_mensal_real': custo_mensal_real,
-        'total_aportes': total_aportes_investimentos
-    })
+    for nome, dados in dados_ordenados:
+        if any(p in nome.lower() for p in palavras_chave_aportes):
+            labels_aportes.append(nome)
+            valores_aportes.append(dados[0])
+        else:
+            labels_despesas.append(nome)
+            valores_despesas.append(dados[0])
+            ids_despesas.append(dados[1])
+
+    # ==========================================
+    # 3. HISTÓRICO E CALCULO INTELIGENTE DA MÉDIA
+    # ==========================================
+    labels_historico = []
+    entradas_historico = []
+    saidas_historico = []
+    
+    meses_com_gastos_reais = 0
+    soma_custos_reais_historico = 0.0
+
+    for i in range(5, -1, -1):
+        data_mes = data_ref - relativedelta(months=i)
+        labels_historico.append(data_mes.strftime('%b/%y'))
+        
+        _, _, custo_real_m = calcular_dados_mes(data_mes.month, data_mes.year)
+        
+        # Só computa para o divisor da média se houver custo real de vida ativo no mês
+        if custo_real_m > 0:
+            meses_com_gastos_reais += 1
+            soma_custos_reais_historico += custo_real_m
+
+        total_entradas = Receita.objects.filter(
+            data__month=data_mes.month, data__year=data_mes.year
+        ).aggregate(total=Sum('valor'))['total'] or 0.0
+        entradas_historico.append(float(total_entradas))
+        saidas_historico.append(custo_real_m)
+
+    # Média dinâmica baseada apenas nos meses com atividade de fato
+    divisor_media = meses_com_gastos_reais if meses_com_gastos_reais > 0 else 1
+    media_custo_vida = soma_custos_reais_historico / divisor_media
+    
+    if media_custo_vida == 0:
+        media_custo_vida = custo_mensal_real_atual
+
+    # Metas calibradas (6 meses mínimo, 12 meses ideal)
+    reserva_minima = media_custo_vida * 6
+    reserva_ideal = media_custo_vida * 12
+    
+    # === CORREÇÃO AQUI: Busca apenas a caixinha específica da Reserva ===
+    # O filtro 'nome__icontains' garante que vai achar mesmo se estiver com letras maiúsculas/minúsculas
+    caixinha_emergencia = Caixinha.objects.filter(nome__icontains='Reserva de Emergência').first()
+    
+    # Se a caixinha existir, pega o saldo dela. Se não existir ou estiver zerada, assume 0.0
+    saldo_real_reserva = float(caixinha_emergencia.saldo_atual) if caixinha_emergencia else 0.0
+    
+    # O progresso agora calcula com base no dinheiro real da segurança
+    progresso_reserva = min(int((saldo_real_reserva / reserva_ideal) * 100), 100) if reserva_ideal > 0 else 0
+
+    # ==========================================
+    # 4. MONTAGEM DO SEMÁFORO DE 3 MESES
+    # ==========================================
+    meses_semaforo = [
+        data_ref - relativedelta(months=1),  # Anterior
+        data_ref,                            # Atual
+        data_ref + relativedelta(months=1)   # Próximo
+    ]
+    
+    semaforo_dados = []
+    
+    # Busca o total de receitas fixas cadastradas no seu sistema para usar como previsão
+    # (Ajuste o nome do Model se no seu projeto for ReceitaFixa no singular)
+    from finance.models import ReceitaFixa 
+    total_receitas_fixas_recorrentes = float(ReceitaFixa.objects.aggregate(t=Sum('valor'))['t'] or 0.0)
+
+    for d_m in meses_semaforo:
+        t_g, t_ap, c_re = calcular_dados_mes(d_m.month, d_m.year)
+        
+        # Busca o que já foi depositado de fato no mês
+        total_lancado = Receita.objects.filter(data__month=d_m.month, data__year=d_m.year).aggregate(t=Sum('valor'))['t'] or 0.0
+        t_ent = float(total_lancado)
+        
+        # === A MÁGICA AQUI: Se for um mês futuro e estiver zerado, assume a receita fixa esperada ===
+        if t_ent == 0.0 and (d_m.year > data_hoje.year or (d_m.year == data_hoje.year and d_m.month > data_hoje.month)):
+            t_ent = total_receitas_fixas_recorrentes
+        
+        sobra_real = t_ent - t_g
+        
+        if sobra_real < 0:
+            status = "Déficit ⚠️"
+            cor = "text-danger fw-bold"
+        elif t_g == 0 and t_ent == 0:
+            status = "Sem lançamentos"
+            cor = "text-muted"
+        else:
+            status = "Saudável 🎯"
+            cor = "text-success fw-bold"
+            
+        semaforo_dados.append({
+            'label': d_m.strftime('%B / %Y'),
+            'mes': d_m.month,
+            'ano': d_m.year,
+            'entradas': t_ent,
+            'custo_real': c_re,
+            'aportes': t_ap,
+            'sobra': sobra_real,
+            'status': status,
+            'cor': cor
+        })
+
+    context = {
+        'mes': mes, 'ano': ano, 'data_ref': data_ref,
+        'mes_ant_url': f"?mes={mes_anterior_url.month}&ano={mes_anterior_url.year}" if 'mes_anterior_url' in locals() else f"?mes={(data_ref - relativedelta(months=1)).month}&ano={(data_ref - relativedelta(months=1)).year}",
+        'prox_mes_url': f"?mes={(data_ref + relativedelta(months=1)).month}&ano={(data_ref + relativedelta(months=1)).year}",
+        'labels': labels_despesas,
+        'data': valores_despesas,
+        'ids_categorias': ids_despesas,
+        'labels_aportes': labels_aportes,
+        'valores_aportes': valores_aportes,
+        'custo_mensal_real': custo_mensal_real_atual,
+        'total_aportes': total_aportes_mes,
+        'total_geral': total_geral_saidas,
+        'labels_historico': labels_historico,
+        'entradas_historico': entradas_historico,
+        'saidas_historico': saidas_historico,
+        'media_custo_vida': media_custo_vida,
+        'reserva_minima': reserva_minima,
+        'reserva_ideal': reserva_ideal,
+        'saldo_caixinhas': saldo_real_reserva,
+        'progresso_reserva': progresso_reserva,
+        'semaforo_dados': semaforo_dados
+    }
+    return render(request, 'relatorio_categorias.html', context)
 
 def relatorio_anual(request):
     """Gera o Semáforo projetando como o mês DEVE TERMINAR"""
@@ -1057,15 +1221,14 @@ def relatorio_anual(request):
     return render(request, 'relatorio_anual.html', {'ano': ano, 'grid': grid_meses})
 
 def detalhes_gastos_categoria(request, categoria_id):
+    """Exibe a listagem completa e exclusiva de gastos de uma categoria ordenados do mais caro para o mais barato"""
     categoria = get_object_or_404(Categoria, id=categoria_id)
-    
-    # Recupera o mês e ano da URL ou usa o atual como padrão
     mes = int(request.GET.get('mes', timezone.now().month))
     ano = int(request.GET.get('ano', timezone.now().year))
     
     detalhes_gastos = []
     
-    # 1. Busca transações no débito/dinheiro desta categoria no mês
+    # 1. Débito / Dinheiro
     transacoes_debito = Transacao.objects.filter(
         categoria=categoria,
         eh_cartao=False,
@@ -1077,11 +1240,11 @@ def detalhes_gastos_categoria(request, categoria_id):
         detalhes_gastos.append({
             'data': t.data_compra,
             'descricao': t.descricao,
-            'valor': t.valor_total,
+            'valor': float(t.valor_total),
             'tipo': 'Débito / PIX'
         })
         
-    # 2. Busca parcelas de cartão desta categoria que vencem no mês
+    # 2. Parcelas de Cartão
     parcelas_cartao = Parcela.objects.filter(
         transacao__categoria=categoria,
         data_vencimento__month=mes,
@@ -1091,27 +1254,22 @@ def detalhes_gastos_categoria(request, categoria_id):
         detalhes_gastos.append({
             'data': p.data_vencimento,
             'descricao': f"{p.transacao.descricao} ({p.numero_parcela}/{p.transacao.qtd_parcelas})",
-            'valor': p.valor,
-            'tipo': f"Cartão de Crédito"
+            'valor': float(p.valor),
+            'tipo': 'Cartão de Crédito'
         })
         
-    # 3. Busca gastos fixos (assinaturas) no cartão vinculados a essa categoria
-    fixos_cartao = GastoFixo.objects.filter(
-        categoria=categoria,
-        eh_cartao=True
-    )
+    # 3. Gastos Fixos / Assinaturas no Cartão
+    fixos_cartao = GastoFixo.objects.filter(categoria=categoria, eh_cartao=True)
     for f in fixos_cartao:
-        # Apenas adicionamos se o gasto fixo teoricamente ocorre no mês de análise
         detalhes_gastos.append({
-            'data': date(ano, mes, f.dia_vencimento),
+            'data': date(ano, mes, min(int(f.dia_vencimento), 28)),
             'descricao': f"{f.nome} (Assinatura)",
-            'valor': f.valor_previsto,
-            'tipo': "Cartão (Recorrente)"
+            'valor': float(f.valor_previsto),
+            'tipo': 'Cartão (Recorrente)'
         })
         
-    # Ordena os gastos por data (mais recentes primeiro)
-    detalhes_gastos.sort(key=lambda x: x['data'], reverse=True)
-    
+    # Ordenação do mais caro para o mais barato
+    detalhes_gastos.sort(key=lambda x: x['valor'], reverse=True)
     total_gasto = sum(item['valor'] for item in detalhes_gastos)
     
     context = {

@@ -35,6 +35,16 @@
                     <a class="nav-link" href="{% url 'extrato' %}">📜 Extrato</a>
                 </li>
 
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'relatorio_categorias' %}">
+                        📈 Análises
+                    </a>
+                    <!-- <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{% url 'relatorio_categorias' %}">🍕 Gastos por Categoria</a></li>
+                        <li><a class="dropdown-item" href="{% url 'relatorio_anual' %}">🗓️ Semáforo Anual</a></li>
+                    </ul> -->
+                </li>
+
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle fw-bold" href="#" role="button" data-bs-toggle="dropdown">
                         🎯 Meu Dinheiro
@@ -42,16 +52,6 @@
                     <ul class="dropdown-menu">
                         <li><a class="dropdown-item fw-bold" href="{% url 'gerenciar_categorias' %}">📂 Planejamento (Categorias)</a></li>
                         <li><a class="dropdown-item fw-bold" href="{% url 'caixinhas' %}">🐖 Minhas Caixinhas</a></li>
-                    </ul>
-                </li>
-
-                <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                        📈 Análises
-                    </a>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="{% url 'relatorio_categorias' %}">🍕 Gastos por Categoria</a></li>
-                        <li><a class="dropdown-item" href="{% url 'relatorio_anual' %}">🗓️ Semáforo Anual</a></li>
                     </ul>
                 </li>
 
