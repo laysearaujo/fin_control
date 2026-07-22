@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 600px;">
+    <div class="card border-0 shadow-lg rounded-4 p-4 bg-white">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="fw-bold text-dark m-0">Resgatar Dinheiro de Caixinha</h4>
+            <a href="{% url 'caixinhas' %}" class="btn-close"></a>
+        </div>
+
+        <form method="POST" action="{% url 'resgatar_caixinha' %}">
+            {% csrf_token %}
+            <input type="hidden" name="zerar_tudo" id="zerar_tudo" value="false">
+
+            <!-- Seleção da Caixinha -->
+            <div class="mb-3">
+                <label class="form-label fw-bold text-secondary">De qual caixinha você vai retirar?</label>
+                <select name="caixinha_id" id="select_caixinha" class="form-select form-select-lg fw-bold" required onchange="atualizarSaldo()">
+                    <option value="" selected disabled>Escolha a caixinha...</option>
+                    {% for c in caixinhas %}
+                        <option value="{{ c.id }}" data-saldo="{{ c.saldo_atual }}">
+                            🐖 {{ c.nome }} (Saldo: R$ {{ c.saldo_atual|floatformat:2 }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Botão de Atalho para Zerar -->
+            <div class="mb-3 text-end d-none" id="div_zerar">
+                <button type="button" class="btn btn-outline-danger btn-sm rounded-pill fw-bold" onclick="zerarTudo()">
+                    Resgatar Tudo (Zerar Saldo)
+                </button>
+            </div>
+
+            <!-- Campo de Valor -->
+            <div class="mb-3">
+                <label class="form-label fw-bold text-secondary">Valor do Resgate (R$)</label>
+                <input type="number" step="0.01" name="valor" id="campo_valor" class="form-control form-control-lg fw-bold text-dark" placeholder="0.00" required>
+            </div>
+
+            <!-- Categoria do Gasto -->
+            <div class="mb-3">
+                <label class="form-label fw-bold text-secondary">Para qual categoria foi esse gasto?</label>
+                <select name="categoria" class="form-select" required>
+                    <option value="" selected disabled>Selecione onde o dinheiro foi usado...</option>
+                    {% for cat in categorias %}
+                        <option value="{{ cat.id }}">{{ cat.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Motivo/Descrição -->
+            <div class="mb-4">
+                <label class="form-label fw-bold text-secondary">Motivo / Detalhes (Opcional)</label>
+                <input type="text" name="descricao" class="form-control" placeholder="Ex: Conserto do carro, Emergência médica...">
+            </div>
+
+            <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-danger btn-lg rounded-3 fw-bold">Confirmar Resgate</button>
+                <a href="{% url 'caixinhas' %}" class="btn btn-light rounded-3">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    let saldoAtualSelecionado = 0;
+
+    function atualizarSaldo() {
+        const select = document.getElementById('select_caixinha');
+        const option = select.options[select.selectedIndex];
+        saldoAtualSelecionado = parseFloat(option.getAttribute('data-saldo') || 0);
+        
+        document.getElementById('campo_valor').max = saldoAtualSelecionado;
+        document.getElementById('div_zerar').classList.remove('d-none');
+        document.getElementById('zerar_tudo').value = "false";
+    }
+
+    function zerarTudo() {
+        document.getElementById('campo_valor').value = saldoAtualSelecionado.toFixed(2);
+        document.getElementById('zerar_tudo').value = "true";
+    }
+</script>
+{% endblock %}

@@ -1,14 +1,42 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <a href="{% url 'caixinhas' %}" class="btn btn-sm btn-light border rounded-pill px-3 mb-2">⬅️ Voltar para Caixinhas</a>
-        <h2 class="fw-bold m-0">📊 Painel: {{ caixinha.nome }}</h2>
-        <span class="badge bg-success bg-opacity-10 text-success border mt-1">{{ caixinha.meta_cdi }}% do CDI</span>
+<div class="container-fluid py-2">
+    <!-- CABEÇALHO DO PAINEL -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <div>
+            <a href="{% url 'caixinhas' %}" class="btn btn-sm btn-light border rounded-pill px-3 mb-2">
+                ⬅️ Voltar para Caixinhas
+            </a>
+            <h2 class="fw-bold m-0 text-dark">🐖 Painel: {{ caixinha.nome }}</h2>
+            <span class="badge bg-success bg-opacity-10 text-success border mt-1 fs-6 px-3 rounded-pill">
+                Rendimento: {{ caixinha.meta_cdi }}% do CDI
+            </span>
+        </div>
+        
+        <div class="text-end">
+            <small class="text-muted d-block text-uppercase fw-bold" style="font-size: 0.75rem;">Saldo Atual Acumulado</small>
+            <h1 class="fw-bold text-dark m-0">R$ {{ caixinha.saldo_atual|floatformat:2 }}</h1>
+        </div>
     </div>
-    <h1 class="fw-bold text-dark m-0">R$ {{ caixinha.saldo_atual|floatformat:2 }}</h1>
-</div>
+
+    <!-- AÇÕES RÁPIDAS DA CAIXINHA -->
+    <div class="card border-0 shadow-sm rounded-4 p-3 bg-white mb-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <span class="fw-bold text-secondary ps-2">⚡ Ações Rápidas nesta Caixinha:</span>
+            <div class="d-flex gap-2">
+                <a href="{% url 'resgatar_caixinha' %}" class="btn btn-outline-danger fw-bold rounded-pill px-3">
+                    Resgatar Dinheiro
+                </a>
+                <a href="{% url 'novo_emprestimo_proprio' %}?caixinha_id={{ caixinha.id }}" class="btn btn-warning fw-bold rounded-pill px-3 text-dark">
+                    💸 Auto-Empréstimo
+                </a>
+                <a href="{% url 'editar_caixinha' caixinha.id %}" class="btn btn-light border rounded-pill px-3">
+                    ⚙️ Editar Caixinha
+                </a>
+            </div>
+        </div>
+    </div>
 
 {% if caixinha.descricao %}
 <div class="alert bg-white border shadow-sm rounded-4 mb-4">

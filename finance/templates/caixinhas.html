@@ -7,8 +7,9 @@
         <p class="text-muted">Patrimônio Total Guardado: <strong class="text-success">R$ {{ total|floatformat:2 }}</strong></p>
     </div>
     <div>
-        <a href="{% url 'novo_emprestimo_proprio' %}" class="btn btn-warning me-2">💸 Auto-Empréstimo</a>
         <a href="{% url 'nova_caixinha' %}" class="btn btn-success">+ Nova Caixinha</a>
+        <a href="{% url 'novo_emprestimo_proprio' %}" class="btn btn-warning">💸 Auto-Empréstimo</a>
+        <a href="{% url 'resgatar_caixinha' %}" class="btn btn-danger">💸 Resgatar</a>
     </div>
 </div>
 

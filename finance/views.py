@@ -2,6 +2,8 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Sum
 from django.db import transaction
 from django.utils import timezone
+from django.contrib import messages
+from django.db.models import Q
 from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
@@ -345,8 +347,68 @@ def detalhes_caixinha(request, id):
     }
     return render(request, 'detalhes_caixinha.html', context)
 
+def resgatar_caixinha(request):
+    """Resgata valor parcial ou total de uma caixinha selecionada e gera a transação no extrato"""
+    caixinhas = Caixinha.objects.all()
+    categorias = Categoria.objects.all()
+
+    if request.method == 'POST':
+        caixinha_id = request.POST.get('caixinha_id')
+        zerar_tudo = request.POST.get('zerar_tudo') == 'true'
+        categoria_id = request.POST.get('categoria')
+        descricao_motivo = request.POST.get('descricao', '').strip() # Descrição do motivo do resgate
+
+        caixinha = get_object_or_404(Caixinha, id=caixinha_id)
+        categoria_obj = get_object_or_404(Categoria, id=categoria_id)
+
+        if zerar_tudo:
+            valor_resgate = caixinha.saldo_atual
+        else:
+            try:
+                valor_resgate = Decimal(request.POST.get('valor', '0').replace(',', '.'))
+            except ValueError:
+                valor_resgate = Decimal('0.0')
+
+        if valor_resgate <= 0 or valor_resgate > caixinha.saldo_atual:
+            messages.error(request, f"Valor inválido ou maior que o saldo disponível na caixinha '{caixinha.nome}'!")
+            return redirect('resgatar_caixinha')
+
+
+        # 1. Deduz o saldo da caixinha escolhida
+        caixinha.saldo_atual -= valor_resgate
+        caixinha.save()
+
+        # 2. Registra a despesa no Extrato com a identificação clara
+        categoria_obj = Categoria.objects.filter(id=categoria_id).first() if categoria_id else None
+        descricao_final = f"Resgate: {descricao_motivo}" if descricao_motivo else f"Resgate da caixinha {caixinha.nome}"
+
+        Transacao.objects.create(
+            descricao=descricao_final,
+            valor_total=valor_resgate,
+            categoria=categoria_obj,
+            data_compra=timezone.now().date(),
+            caixinha_destino=caixinha, # Vínculo direto com a caixinha
+            eh_cartao=False, # Resgate sempre sai do saldo
+            eh_pagamento_fatura=False
+        )
+
+        messages.success(request, f"Resgate de R$ {valor_resgate:.2f} realizado com sucesso da caixinha '{caixinha.nome}'!")
+        return redirect('caixinhas')
+
+    return render(request, 'form_resgatar_caixinha.html', {
+        'caixinhas': caixinhas,
+        'categorias': categorias
+    })
+
 def novo_emprestimo_proprio(request):
-    form = EmprestimoProprioForm(request.POST or None)
+    # [NOVO] Pega o ID da caixinha da URL para pré-selecionar
+    caixinha_id = request.GET.get('caixinha_id')
+    dados_iniciais = {}
+    if caixinha_id:
+        dados_iniciais['caixinha_origem'] = caixinha_id
+
+    form = EmprestimoProprioForm(request.POST or None, initial=dados_iniciais)
+
     if form.is_valid():
         emp = form.save(commit=False)
         caixinha = emp.caixinha_origem
@@ -1061,10 +1123,10 @@ def relatorio_categorias(request):
     if media_custo_vida == 0:
         media_custo_vida = custo_mensal_real_atual
 
-    # Metas calibradas (6 meses mínimo, 12 meses ideal)
-    reserva_minima = media_custo_vida * 6
-    reserva_ideal = media_custo_vida * 12
-    
+    # Metas calibradas (3 meses mínimo, 6 meses ideal)
+    reserva_minima = media_custo_vida * 3
+    reserva_ideal = media_custo_vida * 6
+
     # === CORREÇÃO AQUI: Busca apenas a caixinha específica da Reserva ===
     # O filtro 'nome__icontains' garante que vai achar mesmo se estiver com letras maiúsculas/minúsculas
     caixinha_emergencia = Caixinha.objects.filter(nome__icontains='Reserva de Emergência').first()
@@ -1259,10 +1321,17 @@ def detalhes_gastos_categoria(request, categoria_id):
         })
         
     # 3. Gastos Fixos / Assinaturas no Cartão
-    fixos_cartao = GastoFixo.objects.filter(categoria=categoria, eh_cartao=True)
+    # CORREÇÃO: Filtra os gastos fixos para garantir que eles sejam do mês/ano da consulta.
+    # Isso evita que assinaturas de outros meses apareçam no detalhamento.
+    fixos_cartao = GastoFixo.objects.filter(
+        categoria=categoria, eh_cartao=True, dia_vencimento__gt=0 # Apenas para simular a data
+    )
     for f in fixos_cartao:
         detalhes_gastos.append({
-            'data': date(ano, mes, min(int(f.dia_vencimento), 28)),
+            # CORREÇÃO: Garante que a data do gasto recorrente respeite o mês/ano da consulta.
+            # A função min() evita erros em meses com menos de 31 dias.
+            # O relativedelta(day=f.dia_vencimento) ajusta para o dia correto.
+            'data': date(ano, mes, 1) + relativedelta(day=min(int(f.dia_vencimento), 28)),
             'descricao': f"{f.nome} (Assinatura)",
             'valor': float(f.valor_previsto),
             'tipo': 'Cartão (Recorrente)'
