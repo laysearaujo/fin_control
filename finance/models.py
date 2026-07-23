@@ -3,123 +3,133 @@ from django.utils import timezone
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
 
-# --- TIPOS BÁSICOS ---
-class Categoria(models.Model):
-    nome = models.CharField(max_length=50)
-    teto_mensal = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    logica_reversa = models.BooleanField(default=False)
-    def __str__(self): return self.nome
+# --- BASIC TYPES ---
+class Category(models.Model):
+    name = models.CharField(max_length=50, verbose_name="Nome")
+    monthly_cap = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Teto Mensal (R$)")
+    reverse_logic = models.BooleanField(default=False, verbose_name="É uma categoria de Aporte/Reserva?")
 
-class CartaoCredito(models.Model):
-    nome = models.CharField(max_length=50)
-    limite = models.DecimalField(max_digits=10, decimal_places=2)
-    dia_fechamento = models.IntegerField()
-    dia_vencimento = models.IntegerField()
-    def __str__(self): return self.nome
-    
-    def get_data_vencimento_real(self, data_compra):
-        if data_compra.day >= self.dia_fechamento:
-            proximo_mes = data_compra + relativedelta(months=1)
-            return proximo_mes.replace(day=self.dia_vencimento)
-        return data_compra.replace(day=self.dia_vencimento)
+    def __str__(self): return self.name
 
-# --- INVESTIMENTOS (CAIXINHAS) ---
-class Caixinha(models.Model):
-    nome = models.CharField(max_length=100) # Ex: Reserva de Emergência
-    saldo_atual = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    meta_cdi = models.DecimalField(max_digits=5, decimal_places=2, default=102, help_text="% do CDI (Ex: 100, 102)")
-    meta_valor = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Meta em R$ para esta caixinha (Opcional)")
-    descricao = models.TextField(null=True, blank=True, help_text="Para que serve esta caixinha? (Opcional)")
-    
-    def projecao_mes_seguinte(self):
+class CreditCard(models.Model):
+    name = models.CharField(max_length=50, verbose_name="Nome")
+    limit = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Limite (R$)")
+    closing_day = models.IntegerField(verbose_name="Dia de Fechamento")
+    due_day = models.IntegerField(verbose_name="Dia de Vencimento")
+
+    def __str__(self): return self.name
+
+    def get_actual_due_date(self, purchase_date):
+        if purchase_date.day >= self.closing_day:
+            next_month = purchase_date + relativedelta(months=1)
+            return next_month.replace(day=self.due_day)
+        return purchase_date.replace(day=self.due_day)
+
+# --- INVESTMENTS (SAVINGS BOXES) ---
+class SavingsBox(models.Model):
+    name = models.CharField(max_length=100, verbose_name="Nome")  # Ex: Reserva de Emergência
+    current_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Saldo Atual (R$)")
+    cdi_target_pct = models.DecimalField(max_digits=5, decimal_places=2, default=102, verbose_name="% do CDI", help_text="% do CDI (Ex: 100, 102)")
+    target_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, verbose_name="Meta (R$)", help_text="Meta em R$ para esta caixinha (Opcional)")
+    description = models.TextField(null=True, blank=True, verbose_name="Descrição", help_text="Para que serve esta caixinha? (Opcional)")
+    is_emergency_reserve = models.BooleanField(
+        default=False,
+        verbose_name="É a sua reserva de emergência?",
+        help_text="Marca esta caixinha como sua reserva de emergência para os relatórios (independente do nome dela)"
+    )
+
+    def project_next_month(self):
         # Taxa CDI Mensal Aprox (0.85% ao mês)
-        taxa = Decimal(0.0085) * (self.meta_cdi / 100)
-        return self.saldo_atual * (1 + taxa)
-    
-    def __str__(self): return self.nome
+        rate = Decimal(0.0085) * (self.cdi_target_pct / 100)
+        return self.current_balance * (1 + rate)
 
-class EmprestimoProprio(models.Model):
-    caixinha_origem = models.ForeignKey(Caixinha, on_delete=models.CASCADE)
-    valor_emprestado = models.DecimalField(max_digits=10, decimal_places=2)
-    juros_mensais = models.DecimalField(max_digits=5, decimal_places=2, help_text="% de juros que você vai se pagar")
-    qtd_parcelas = models.IntegerField()
-    data_inicio = models.DateField(default=timezone.now)
-    ativo = models.BooleanField(default=True)
-    
-    def valor_parcela(self):
+    def __str__(self): return self.name
+
+class SelfLoan(models.Model):
+    source_savings_box = models.ForeignKey(SavingsBox, on_delete=models.CASCADE, verbose_name="Caixinha de Origem")
+    borrowed_amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor Emprestado (R$)")
+    monthly_interest_pct = models.DecimalField(max_digits=5, decimal_places=2, verbose_name="Juros Mensais (%)", help_text="% de juros que você vai se pagar")
+    installments_count = models.IntegerField(verbose_name="Quantidade de Parcelas")
+    start_date = models.DateField(default=timezone.now, verbose_name="Data de Início")
+    active = models.BooleanField(default=True, verbose_name="Ativo")
+
+    def installment_amount(self):
         # Cálculo simples de juros simples para facilitar (ou Price se quiser avançado)
-        total_com_juros = self.valor_emprestado * (1 + (self.juros_mensais/100 * self.qtd_parcelas))
-        return total_com_juros / self.qtd_parcelas
+        total_with_interest = self.borrowed_amount * (1 + (self.monthly_interest_pct / 100 * self.installments_count))
+        return total_with_interest / self.installments_count
 
-# --- FLUXO DE CAIXA ---
-class ReceitaFixa(models.Model):
-    descricao = models.CharField(max_length=100)
-    valor = models.DecimalField(max_digits=10, decimal_places=2)
-    dia_recebimento = models.IntegerField()
+# --- CASH FLOW ---
+class FixedIncome(models.Model):
+    description = models.CharField(max_length=100, verbose_name="Descrição")
+    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor (R$)")
+    payment_day = models.IntegerField(verbose_name="Dia de Recebimento")
 
-class GastoFixo(models.Model):
-    nome = models.CharField(max_length=100)
-    valor_previsto = models.DecimalField(max_digits=10, decimal_places=2)
-    dia_vencimento = models.IntegerField()
-    categoria = models.ForeignKey(Categoria, on_delete=models.SET_NULL, null=True, blank=True)
-    eh_cartao = models.BooleanField(default=False)
-    cartao = models.ForeignKey(CartaoCredito, on_delete=models.SET_NULL, null=True, blank=True)
-    emprestimo_vinculado = models.ForeignKey(EmprestimoProprio, on_delete=models.SET_NULL, null=True, blank=True)
-    caixinha_destino = models.ForeignKey('Caixinha', on_delete=models.SET_NULL, null=True, blank=True, help_text="Se for um aporte, escolha a caixinha de destino")
+class FixedExpense(models.Model):
+    name = models.CharField(max_length=100, verbose_name="Nome")
+    expected_amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor Previsto (R$)")
+    due_day = models.IntegerField(verbose_name="Dia de Vencimento")
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Categoria")
+    is_credit_card = models.BooleanField(default=False, verbose_name="É no Cartão de Crédito?")
+    credit_card = models.ForeignKey(CreditCard, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Cartão")
+    linked_loan = models.ForeignKey(SelfLoan, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Empréstimo Vinculado")
+    target_savings_box = models.ForeignKey('SavingsBox', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Caixinha de Destino", help_text="Se for um aporte, escolha a caixinha de destino")
 
-class Receita(models.Model):
-    descricao = models.CharField(max_length=100)
-    valor = models.DecimalField(max_digits=10, decimal_places=2)
-    data = models.DateField(default=timezone.now)
+class Income(models.Model):
+    description = models.CharField(max_length=100, verbose_name="Descrição")
+    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor (R$)")
+    date = models.DateField(default=timezone.now, verbose_name="Data")
+    fixed_income = models.ForeignKey(FixedIncome, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Receita Fixa Correspondente")
 
     def __str__(self):
-        return f"{self.descricao} - R$ {self.valor}"
+        return f"{self.description} - R$ {self.amount}"
 
-class Transacao(models.Model):
-    descricao = models.CharField(max_length=100)
-    valor_total = models.DecimalField(max_digits=10, decimal_places=2)
-    data_compra = models.DateField(default=timezone.now)
-    categoria = models.ForeignKey(Categoria, on_delete=models.SET_NULL, null=True)
-    
-    eh_cartao = models.BooleanField(default=False)
-    cartao = models.ForeignKey(CartaoCredito, on_delete=models.SET_NULL, null=True, blank=True)
-    qtd_parcelas = models.IntegerField(default=1)
-    
-    gasto_fixo = models.ForeignKey(GastoFixo, on_delete=models.SET_NULL, null=True, blank=True)
-    eh_pagamento_fatura = models.BooleanField(default=False)
+class Transaction(models.Model):
+    description = models.CharField(max_length=100, verbose_name="Descrição")
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor Total (R$)")
+    purchase_date = models.DateField(default=timezone.now, verbose_name="Data da Compra")
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, verbose_name="Categoria")
 
-    conta_avulsa = models.ForeignKey('ContaAvulsa', on_delete=models.SET_NULL, null=True, blank=True)
+    is_credit_card = models.BooleanField(default=False, verbose_name="É no Cartão de Crédito?")
+    credit_card = models.ForeignKey(CreditCard, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Cartão")
+    installments_count = models.IntegerField(default=1, verbose_name="Quantidade de Parcelas")
 
-    caixinha_destino = models.ForeignKey('Caixinha', on_delete=models.SET_NULL, null=True, blank=True)
-    caixinha_origem = models.ForeignKey('Caixinha', on_delete=models.SET_NULL, null=True, blank=True, related_name='transacoes_saida')
-    eh_movimentacao_interna = models.BooleanField(default=False)
+    fixed_expense = models.ForeignKey(FixedExpense, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Gasto Fixo Correspondente")
+    is_invoice_payment = models.BooleanField(default=False, verbose_name="É Pagamento de Fatura?")
+    invoice_month = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name="Mês da Fatura", help_text="Mês da fatura que este pagamento quita (só para pagamentos de fatura)")
+    invoice_year = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name="Ano da Fatura", help_text="Ano da fatura que este pagamento quita (só para pagamentos de fatura)")
+
+    one_off_bill = models.ForeignKey('OneOffBill', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Conta Avulsa Correspondente")
+
+    target_savings_box = models.ForeignKey('SavingsBox', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Caixinha de Destino")
+    source_savings_box = models.ForeignKey('SavingsBox', on_delete=models.SET_NULL, null=True, blank=True, related_name='outgoing_transactions', verbose_name="Caixinha de Origem")
+    is_internal_transfer = models.BooleanField(default=False, verbose_name="É Movimentação Interna?")
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        if self.eh_cartao and self.cartao:
-            self.gerar_parcelas()
+        if self.is_credit_card and self.credit_card:
+            self.generate_installments()
 
-    def gerar_parcelas(self):
-        if Parcela.objects.filter(transacao=self).exists(): return
-        valor_parcela = self.valor_total / self.qtd_parcelas
-        data_base = self.data_compra
-        for i in range(self.qtd_parcelas):
-            data_parcela_atual = data_base + relativedelta(months=i)
-            data_vencimento_real = self.cartao.get_data_vencimento_real(data_parcela_atual)
-            Parcela.objects.create(transacao=self, numero_parcela=i+1, valor=valor_parcela, data_vencimento=data_vencimento_real)
+    def generate_installments(self):
+        if Installment.objects.filter(transaction=self).exists(): return
+        installment_amount = self.total_amount / self.installments_count
+        base_date = self.purchase_date
+        for i in range(self.installments_count):
+            current_installment_date = base_date + relativedelta(months=i)
+            actual_due_date = self.credit_card.get_actual_due_date(current_installment_date)
+            Installment.objects.create(transaction=self, installment_number=i + 1, amount=installment_amount, due_date=actual_due_date)
 
-class Parcela(models.Model):
-    transacao = models.ForeignKey(Transacao, on_delete=models.CASCADE)
-    numero_parcela = models.IntegerField()
-    valor = models.DecimalField(max_digits=10, decimal_places=2)
-    data_vencimento = models.DateField()
-    pago = models.BooleanField(default=False)
+class Installment(models.Model):
+    transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE, verbose_name="Transação")
+    installment_number = models.IntegerField(verbose_name="Número da Parcela")
+    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor (R$)")
+    due_date = models.DateField(verbose_name="Data de Vencimento")
+    paid = models.BooleanField(default=False, verbose_name="Pago")
 
-class ContaAvulsa(models.Model):
-    titulo = models.CharField(max_length=100)
-    valor = models.DecimalField(max_digits=10, decimal_places=2)
-    data_vencimento = models.DateField()
-    categoria = models.ForeignKey('Categoria', on_delete=models.SET_NULL, null=True, blank=True)
-    
+class OneOffBill(models.Model):
+    title = models.CharField(max_length=100, verbose_name="Título")
+    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor (R$)")
+    due_date = models.DateField(verbose_name="Data de Vencimento")
+    category = models.ForeignKey('Category', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Categoria")
+
     def __str__(self):
-        return f"{self.titulo} - {self.data_vencimento}"
+        return f"{self.title} - {self.due_date}"

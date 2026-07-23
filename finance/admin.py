@@ -1,9 +1,9 @@
 from django.contrib import admin
-from .models import Categoria, CartaoCredito, Transacao, Parcela, Receita, GastoFixo
+from .models import Category, CreditCard, Transaction, Installment, Income, FixedExpense
 
-admin.site.register(Receita)
-admin.site.register(GastoFixo)
-admin.site.register(Categoria)
-admin.site.register(CartaoCredito)
-admin.site.register(Transacao)
-# Parcelas eu geralmente não registro para não poluir, ou uso como readonly
+admin.site.register(Income)
+admin.site.register(FixedExpense)
+admin.site.register(Category)
+admin.site.register(CreditCard)
+admin.site.register(Transaction)
+# Installments (parcelas) usually not registered here to keep the admin clean

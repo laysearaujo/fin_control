@@ -13,7 +13,7 @@
                 <button type="submit" class="btn btn-warning w-100 fw-bold">Simular Impacto</button>
             </form>
             
-            {% if simulacao_ativa %}
+            {% if simulation_active %}
             <a href="." class="btn btn-outline-secondary w-100 mt-2">Limpar Simulação</a>
             {% endif %}
         </div>
@@ -32,21 +32,21 @@
                         <th>Mês</th>
                         <th>Receita</th>
                         <th>Já Comprometido</th>
-                        {% if simulacao_ativa %}<th>+ Simulação</th>{% endif %}
+                        {% if simulation_active %}<th>+ Simulação</th>{% endif %}
                         <th>Saldo Final</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for item in tabela %}
-                    <tr class="{% if item.alerta %}table-danger{% endif %}">
-                        <td class="fw-bold">{{ item.mes_nome }}</td>
-                        <td class="text-success">R$ {{ item.receita }}</td>
-                        <td>R$ {{ item.comprometido_real }}</td>
-                        {% if simulacao_ativa %}
-                        <td class="text-warning fw-bold">+ R$ {{ item.simulacao|floatformat:2 }}</td>
+                    {% for item in table %}
+                    <tr class="{% if item.alert %}table-danger{% endif %}">
+                        <td class="fw-bold">{{ item.month_name }}</td>
+                        <td class="text-success">R$ {{ item.income }}</td>
+                        <td>R$ {{ item.committed }}</td>
+                        {% if simulation_active %}
+                        <td class="text-warning fw-bold">+ R$ {{ item.simulation|floatformat:2 }}</td>
                         {% endif %}
-                        <td class="fw-bold {% if item.saldo < 0 %}text-danger{% else %}text-primary{% endif %}">
-                            R$ {{ item.saldo|floatformat:2 }}
+                        <td class="fw-bold {% if item.balance < 0 %}text-danger{% else %}text-primary{% endif %}">
+                            R$ {{ item.balance|floatformat:2 }}
                         </td>
                     </tr>
                     {% endfor %}
@@ -67,7 +67,7 @@
             datasets: [
                 {
                     label: 'Sua Renda',
-                    data: {{ data_receita|safe }},
+                    data: {{ data_income|safe }},
                     type: 'line', // Linha passando por cima
                     borderColor: '#2ecc71',
                     borderWidth: 3,
@@ -76,13 +76,13 @@
                 },
                 {
                     label: 'Simulação (Novo Gasto)',
-                    data: {{ data_simulacao|safe }},
+                    data: {{ data_simulation|safe }},
                     backgroundColor: '#f1c40f', // Laranja/Amarelo
                     stack: 'gastos' // Empilha com o de baixo
                 },
                 {
                     label: 'Já Comprometido (Fixos + Fatura)',
-                    data: {{ data_real|safe }},
+                    data: {{ data_actual|safe }},
                     backgroundColor: '#e74c3c', // Vermelho
                     stack: 'gastos'
                 }

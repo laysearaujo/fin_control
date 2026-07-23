@@ -17,9 +17,9 @@
                 <label class="form-label fw-bold text-secondary">De qual caixinha você vai retirar?</label>
                 <select name="caixinha_id" id="select_caixinha" class="form-select form-select-lg fw-bold" required onchange="atualizarSaldo()">
                     <option value="" selected disabled>Escolha a caixinha...</option>
-                    {% for c in caixinhas %}
-                        <option value="{{ c.id }}" data-saldo="{{ c.saldo_atual }}">
-                            🐖 {{ c.nome }} (Saldo: R$ {{ c.saldo_atual|floatformat:2 }})
+                    {% for c in boxes %}
+                        <option value="{{ c.id }}" data-saldo="{{ c.current_balance }}">
+                            🐖 {{ c.name }} (Saldo: R$ {{ c.current_balance|floatformat:2 }})
                         </option>
                     {% endfor %}
                 </select>
@@ -43,8 +43,8 @@
                 <label class="form-label fw-bold text-secondary">Para qual categoria foi esse gasto?</label>
                 <select name="categoria" class="form-select" required>
                     <option value="" selected disabled>Selecione onde o dinheiro foi usado...</option>
-                    {% for cat in categorias %}
-                        <option value="{{ cat.id }}">{{ cat.nome }}</option>
+                    {% for cat in categories %}
+                        <option value="{{ cat.id }}">{{ cat.name }}</option>
                     {% endfor %}
                 </select>
             </div>

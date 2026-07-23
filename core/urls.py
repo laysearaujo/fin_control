@@ -4,63 +4,63 @@ from finance import views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    
+
     # --- DASHBOARD E EXTRATO ---
     path('', views.dashboard, name='dashboard'),
-    path('extrato/', views.extrato, name='extrato'),
-    path('extrato/editar/<int:id>/', views.editar_transacao, name='editar_transacao'),
-    path('transacao/apagar/<int:id>/', views.apagar_transacao, name='apagar_transacao'),
-    path('analise-anual/', views.analise_anual, name='analise_anual'),
+    path('extrato/', views.statement, name='extrato'),
+    path('extrato/editar/<int:id>/', views.edit_transaction, name='editar_transacao'),
+    path('transacao/apagar/<int:id>/', views.delete_transaction, name='apagar_transacao'),
+    path('analise-anual/', views.annual_analysis, name='analise_anual'),
 
     # --- CAIXINHAS E INVESTIMENTOS (O QUE ESTAVA FALTANDO) ---
-    path('caixinhas/', views.caixinhas, name='caixinhas'),
-    path('caixinhas/nova/', views.nova_caixinha, name='nova_caixinha'),
-    path('caixinhas/emprestimo/', views.novo_emprestimo_proprio, name='novo_emprestimo_proprio'),
-    path('caixinhas/editar/<int:id>/', views.editar_caixinha, name='editar_caixinha'),
-    path('caixinhas/apagar/<int:id>/', views.apagar_caixinha, name='apagar_caixinha'),
-    path('caixinhas/detalhes/<int:id>/', views.detalhes_caixinha, name='detalhes_caixinha'),
-    path('caixinhas/resgatar/', views.resgatar_caixinha, name='resgatar_caixinha'),
+    path('caixinhas/', views.savings_boxes, name='caixinhas'),
+    path('caixinhas/nova/', views.new_savings_box, name='nova_caixinha'),
+    path('caixinhas/emprestimo/', views.new_self_loan, name='novo_emprestimo_proprio'),
+    path('caixinhas/editar/<int:id>/', views.edit_savings_box, name='editar_caixinha'),
+    path('caixinhas/apagar/<int:id>/', views.delete_savings_box, name='apagar_caixinha'),
+    path('caixinhas/detalhes/<int:id>/', views.savings_box_detail, name='detalhes_caixinha'),
+    path('caixinhas/resgatar/', views.withdraw_savings_box, name='resgatar_caixinha'),
 
     # --- TRANSAÇÕES (RECEITA E DESPESA) ---
-    path('despesa/nova/', views.nova_transacao, name='nova_transacao'),
-    path('receita/nova/', views.nova_receita, name='nova_receita'),
-    
+    path('despesa/nova/', views.new_transaction, name='nova_transacao'),
+    path('receita/nova/', views.new_income, name='nova_receita'),
+
     # --- CARTÕES ---
-    path('cartoes/', views.gerenciar_cartoes, name='gerenciar_cartoes'),
-    path('cartoes/novo/', views.novo_cartao, name='novo_cartao'),
-    path('cartoes/editar/<int:id>/', views.editar_cartao, name='editar_cartao'),
-    path('cartoes/apagar/<int:id>/', views.apagar_cartao, name='apagar_cartao'),
-    
+    path('cartoes/', views.manage_credit_cards, name='gerenciar_cartoes'),
+    path('cartoes/novo/', views.new_credit_card, name='novo_cartao'),
+    path('cartoes/editar/<int:id>/', views.edit_credit_card, name='editar_cartao'),
+    path('cartoes/apagar/<int:id>/', views.delete_credit_card, name='apagar_cartao'),
+
     # --- CATEGORIAS ---
-    path('categorias/', views.gerenciar_categorias, name='gerenciar_categorias'),
-    path('categorias/nova/', views.nova_categoria, name='nova_categoria'),
-    path('categorias/guardar-sobra/', views.guardar_sobra, name='guardar_sobra'),
-    path('categorias/editar/<int:id>/', views.editar_categoria, name='editar_categoria'),
-    path('categorias/apagar/<int:id>/', views.apagar_categoria, name='apagar_categoria'),
+    path('categorias/', views.manage_categories, name='gerenciar_categorias'),
+    path('categorias/nova/', views.new_category, name='nova_categoria'),
+    path('categorias/guardar-sobra/', views.save_leftover, name='guardar_sobra'),
+    path('categorias/editar/<int:id>/', views.edit_category, name='editar_categoria'),
+    path('categorias/apagar/<int:id>/', views.delete_category, name='apagar_categoria'),
 
     # --- GASTOS FIXOS (CONTAS) ---
-    path('fixos/', views.gerenciar_fixos, name='gerenciar_fixos'),
-    path('fixos/novo/', views.novo_fixo, name='novo_fixo'),
-    path('fixos/apagar/<int:id>/', views.apagar_fixo, name='apagar_fixo'),
-    path('fixos/pagar/<int:id_fixo>/', views.pagar_gasto_fixo, name='pagar_gasto_fixo'),
+    path('fixos/', views.manage_fixed_expenses, name='gerenciar_fixos'),
+    path('fixos/novo/', views.new_fixed_expense, name='novo_fixo'),
+    path('fixos/apagar/<int:id>/', views.delete_fixed_expense, name='apagar_fixo'),
+    path('fixos/pagar/<int:id_fixo>/', views.pay_fixed_expense, name='pagar_gasto_fixo'),
 
     # --- RECEITAS FIXAS (SALÁRIOS) ---
-    path('receitas-fixas/', views.gerenciar_receitas_fixas, name='gerenciar_receitas_fixas'),
-    path('receitas-fixas/nova/', views.nova_receita_fixa, name='nova_receita_fixa'),
-    path('receitas-fixas/apagar/<int:id>/', views.apagar_receita_fixa, name='apagar_receita_fixa'),
-    path('receita/excluir/<int:id>/', views.excluir_receita, name='excluir_receita'),
-    path('receita/editar/<int:id>/', views.editar_receita, name='editar_receita'),
-    path('editar-fixo/<int:id>/', views.editar_gasto_fixo, name='editar_gasto_fixo'),
-    path('excluir-fixo/<int:id>/', views.excluir_gasto_fixo, name='excluir_gasto_fixo'),
+    path('receitas-fixas/', views.manage_fixed_incomes, name='gerenciar_receitas_fixas'),
+    path('receitas-fixas/nova/', views.new_fixed_income, name='nova_receita_fixa'),
+    path('receitas-fixas/apagar/<int:id>/', views.delete_fixed_income, name='apagar_receita_fixa'),
+    path('receita/excluir/<int:id>/', views.delete_income, name='excluir_receita'),
+    path('receita/editar/<int:id>/', views.edit_income, name='editar_receita'),
+    path('editar-fixo/<int:id>/', views.edit_fixed_expense, name='editar_gasto_fixo'),
+    path('excluir-fixo/<int:id>/', views.remove_fixed_expense, name='excluir_gasto_fixo'),
 
-    path('relatorios/categorias/', views.relatorio_categorias, name='relatorio_categorias'),
-    path('relatorios/anual/', views.relatorio_anual, name='relatorio_anual'),
-    path('relatorios/categorias/detalhes/<int:categoria_id>/', views.detalhes_gastos_categoria, name='detalhes_gastos_categoria'),
+    path('relatorios/categorias/', views.category_report, name='relatorio_categorias'),
+    path('relatorios/anual/', views.annual_report, name='relatorio_anual'),
+    path('relatorios/categorias/detalhes/<int:categoria_id>/', views.category_expense_detail, name='detalhes_gastos_categoria'),
 
-    path('fatura/pagar/', views.pagar_fatura_mensal, name='pagar_fatura_mensal'),
-    
-    path('adicionar-conta-avulsa/', views.adicionar_conta_avulsa, name='adicionar_conta_avulsa'),
-    path('pagar-conta-avulsa/<int:id>/', views.pagar_conta_avulsa, name='pagar_conta_avulsa'),
-    path('apagar-conta-avulsa/<int:id>/', views.apagar_conta_avulsa, name='apagar_conta_avulsa'),
-    path('editar-conta-avulsa/<int:id>/', views.editar_conta_avulsa, name='editar_conta_avulsa'),
+    path('fatura/pagar/', views.pay_monthly_invoice, name='pagar_fatura_mensal'),
+
+    path('adicionar-conta-avulsa/', views.add_one_off_bill, name='adicionar_conta_avulsa'),
+    path('pagar-conta-avulsa/<int:id>/', views.pay_one_off_bill, name='pagar_conta_avulsa'),
+    path('apagar-conta-avulsa/<int:id>/', views.delete_one_off_bill, name='apagar_conta_avulsa'),
+    path('editar-conta-avulsa/<int:id>/', views.edit_one_off_bill, name='editar_conta_avulsa'),
 ]

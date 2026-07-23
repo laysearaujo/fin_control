@@ -27,38 +27,38 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for item in transacoes %}
+                    {% for item in movements %}
                     <tr>
                         <td class="ps-4 text-muted" style="white-space: nowrap;">
-                            {{ item.data|date:"d/m/Y" }}
+                            {{ item.date|date:"d/m/Y" }}
                         </td>
 
                         <td>
-                            <div class="fw-bold text-dark">{{ item.descricao }}</div>
-                            {% if item.eh_cartao %}
+                            <div class="fw-bold text-dark">{{ item.description }}</div>
+                            {% if item.is_credit_card %}
                                 <span class="badge bg-warning text-dark border border-warning" style="font-size: 0.65em">CARTÃO</span>
                             {% endif %}
-                            {% if item.model == 'receita' %}
+                            {% if item.source_model == 'income' %}
                                 <span class="badge bg-success bg-opacity-10 text-success border border-success" style="font-size: 0.65em">ENTRADA</span>
                             {% endif %}
                         </td>
 
                         <td class="text-end fw-bold">
-                            {% if item.tipo == 'entrada' %}
-                                <span class="text-success">+ R$ {{ item.valor|floatformat:2 }}</span>
+                            {% if item.kind == 'income' %}
+                                <span class="text-success">+ R$ {{ item.amount|floatformat:2 }}</span>
                             {% else %}
-                                <span class="text-danger">- R$ {{ item.valor|floatformat:2 }}</span>
+                                <span class="text-danger">- R$ {{ item.amount|floatformat:2 }}</span>
                             {% endif %}
                         </td>
 
                         <td class="pe-4 text-end">
-                            {% if item.model == 'transacao' %}
+                            {% if item.source_model == 'transaction' %}
                                 <a href="{% url 'editar_transacao' item.id %}" 
                                    class="btn btn-sm btn-outline-primary border-0 rounded-circle p-2 me-1" 
                                    title="Editar Despesa">
                                     ✏️
                                 </a>
-                            {% elif item.model == 'receita' %}
+                            {% elif item.source_model == 'income' %}
                                 <a href="{% url 'editar_receita' item.id %}" 
                                    class="btn btn-sm btn-outline-primary border-0 rounded-circle p-2 me-1" 
                                    title="Editar Receita">
@@ -69,12 +69,12 @@
                             <button type="button" 
                                     class="btn btn-sm btn-outline-danger border-0 rounded-circle p-2" 
                                     data-bs-toggle="modal" 
-                                    data-bs-target="#modalApagar{{ item.model }}{{ item.id }}"
+                                    data-bs-target="#modalApagar{{ item.source_model }}{{ item.id }}"
                                     title="Excluir item">
                                 🗑️
                             </button>
 
-                            <div class="modal fade text-start" id="modalApagar{{ item.model }}{{ item.id }}" tabindex="-1">
+                            <div class="modal fade text-start" id="modalApagar{{ item.source_model }}{{ item.id }}" tabindex="-1">
                                 <div class="modal-dialog modal-dialog-centered">
                                     <div class="modal-content border-0 shadow">
                                         
@@ -85,9 +85,9 @@
 
                                         <div class="modal-body text-center py-4">
                                             <p class="mb-1 text-muted">Você está prestes a apagar:</p>
-                                            <h5 class="fw-bold text-dark mb-3">{{ item.descricao }}</h5>
-                                            <h3 class="fw-bold {% if item.tipo == 'entrada' %}text-success{% else %}text-danger{% endif %}">
-                                                R$ {{ item.valor|floatformat:2 }}
+                                            <h5 class="fw-bold text-dark mb-3">{{ item.description }}</h5>
+                                            <h3 class="fw-bold {% if item.kind == 'income' %}text-success{% else %}text-danger{% endif %}">
+                                                R$ {{ item.amount|floatformat:2 }}
                                             </h3>
                                             <p class="small text-muted mt-3 mb-0">Essa ação não pode ser desfeita.</p>
                                         </div>
@@ -95,7 +95,7 @@
                                         <div class="modal-footer justify-content-center border-0 pb-4">
                                             <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
                                             
-                                            {% if item.model == 'receita' %}
+                                            {% if item.source_model == 'income' %}
                                                 <a href="{% url 'excluir_receita' item.id %}" class="btn btn-danger rounded-pill px-4 fw-bold">
                                                     Sim, Apagar Receita
                                                 </a>

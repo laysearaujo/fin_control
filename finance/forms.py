@@ -1,98 +1,103 @@
 from django import forms
-from .models import Transacao, Receita, CartaoCredito, Categoria, GastoFixo, ReceitaFixa, Caixinha, EmprestimoProprio
+from .models import Transaction, Income, CreditCard, Category, FixedExpense, FixedIncome, SavingsBox, SelfLoan
 
 # Estilo padrão para todos os inputs ficarem bonitos
 class BootstrapModelForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for field_name, field in self.fields.items():
-            field.widget.attrs['class'] = 'form-control form-control-lg'
+            # Checkboxes precisam da classe do Bootstrap pra virar um switch, não uma barra gigante
+            if isinstance(field.widget, forms.CheckboxInput):
+                field.widget.attrs['class'] = 'form-check-input'
+            else:
+                field.widget.attrs['class'] = 'form-control form-control-lg'
 
-class TransacaoForm(BootstrapModelForm):
+class TransactionForm(BootstrapModelForm):
     class Meta:
-        model = Transacao
-        fields = ['descricao', 'valor_total', 'categoria', 'caixinha_destino', 'eh_cartao', 'cartao', 'qtd_parcelas', 'data_compra']
+        model = Transaction
+        fields = ['description', 'total_amount', 'category', 'target_savings_box', 'is_credit_card', 'credit_card', 'installments_count', 'purchase_date']
         widgets = {
-            'data_compra': forms.DateInput(attrs={'type': 'date'}),
-            'descricao': forms.TextInput(attrs={'placeholder': 'Ex: Mercado, Uber...'}),
-            'categoria': forms.Select(attrs={'class': 'form-select'}),
-            'caixinha_destino': forms.Select(attrs={'class': 'form-select'}),
-            'eh_cartao': forms.CheckboxInput(attrs={'class': 'form-check-input', 'role': 'switch', 'id': 'check_cartao'}),
-            'cartao': forms.Select(attrs={'class': 'form-select'}),
-            'qtd_parcelas': forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'value': 1}),
+            'purchase_date': forms.DateInput(attrs={'type': 'date'}),
+            'description': forms.TextInput(attrs={'placeholder': 'Ex: Mercado, Uber...'}),
+            'category': forms.Select(attrs={'class': 'form-select'}),
+            'target_savings_box': forms.Select(attrs={'class': 'form-select'}),
+            'is_credit_card': forms.CheckboxInput(attrs={'class': 'form-check-input', 'role': 'switch', 'id': 'check_cartao'}),
+            'credit_card': forms.Select(attrs={'class': 'form-select'}),
+            'installments_count': forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'value': 1}),
         }
 
-class ReceitaFixaForm(BootstrapModelForm):
+class FixedIncomeForm(BootstrapModelForm):
     class Meta:
-        model = ReceitaFixa
-        fields = ['descricao', 'valor', 'dia_recebimento']
+        model = FixedIncome
+        fields = ['description', 'amount', 'payment_day']
         widgets = {
-             'descricao': forms.TextInput(attrs={'placeholder': 'Ex: Salário Mensal, Aluguel...'}),
-             'dia_recebimento': forms.NumberInput(attrs={'max': 31, 'min': 1}),
+             'description': forms.TextInput(attrs={'placeholder': 'Ex: Salário Mensal, Aluguel...'}),
+             'payment_day': forms.NumberInput(attrs={'max': 31, 'min': 1}),
         }
 
-class ReceitaForm(BootstrapModelForm):
+class IncomeForm(BootstrapModelForm):
     class Meta:
-        model = Receita
-        fields = ['descricao', 'valor', 'data']
+        model = Income
+        fields = ['description', 'amount', 'date']
         widgets = {
-            'data': forms.DateInput(attrs={'type': 'date'}),
+            'date': forms.DateInput(attrs={'type': 'date'}),
         }
 
-class CartaoForm(BootstrapModelForm):
+class CreditCardForm(BootstrapModelForm):
     class Meta:
-        model = CartaoCredito
-        fields = ['nome', 'limite', 'dia_fechamento', 'dia_vencimento']
+        model = CreditCard
+        fields = ['name', 'limit', 'closing_day', 'due_day']
         widgets = {
-             'nome': forms.TextInput(attrs={'placeholder': 'Ex: Nubank, Visa...'}),
+             'name': forms.TextInput(attrs={'placeholder': 'Ex: Nubank, Visa...'}),
         }
 
-class CategoriaForm(BootstrapModelForm):
+class CategoryForm(BootstrapModelForm):
     class Meta:
-        model = Categoria
-        fields = ['nome', 'teto_mensal', 'logica_reversa']
+        model = Category
+        fields = ['name', 'monthly_cap', 'reverse_logic']
         widgets = {
-             'nome': forms.TextInput(attrs={'placeholder': 'Ex: Alimentação, Lazer...'}),
+             'name': forms.TextInput(attrs={'placeholder': 'Ex: Alimentação, Lazer...'}),
         }
 
-class GastoFixoForm(BootstrapModelForm):
+class FixedExpenseForm(BootstrapModelForm):
     class Meta:
-        model = GastoFixo
-        fields = ['nome', 'valor_previsto', 'dia_vencimento', 'categoria', 'eh_cartao', 'cartao', 'caixinha_destino']
+        model = FixedExpense
+        fields = ['name', 'expected_amount', 'due_day', 'category', 'is_credit_card', 'credit_card', 'target_savings_box']
         widgets = {
-             'nome': forms.TextInput(attrs={'placeholder': 'Ex: Netflix, Academia...'}),
-             'dia_vencimento': forms.NumberInput(attrs={'max': 31, 'min': 1}),
-             'categoria': forms.Select(attrs={'class': 'form-select'}),
-             'eh_cartao': forms.CheckboxInput(attrs={'class': 'form-check-input', 'role': 'switch', 'id': 'check_cartao'}),
-             'cartao': forms.Select(attrs={'class': 'form-select', 'id': 'campo_cartao'}),
-             'caixinha_destino': forms.Select(attrs={'class': 'form-select'}),
+             'name': forms.TextInput(attrs={'placeholder': 'Ex: Netflix, Academia...'}),
+             'due_day': forms.NumberInput(attrs={'max': 31, 'min': 1}),
+             'category': forms.Select(attrs={'class': 'form-select'}),
+             'is_credit_card': forms.CheckboxInput(attrs={'class': 'form-check-input', 'role': 'switch', 'id': 'check_cartao'}),
+             'credit_card': forms.Select(attrs={'class': 'form-select', 'id': 'campo_cartao'}),
+             'target_savings_box': forms.Select(attrs={'class': 'form-select'}),
         }
 
-class SimulacaoForm(forms.Form):
+class SimulationForm(forms.Form):
     valor_compra = forms.DecimalField(label="Valor da Compra", widget=forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'Ex: 2500.00'}))
     parcelas = forms.IntegerField(label="Nº Parcelas", widget=forms.NumberInput(attrs={'class': 'form-control', 'value': 10}))
     inicio_pagamento = forms.DateField(label="1ª Parcela em:", widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}))
 
-# --- SETUP INICIAL ---
-class SetupInicialForm(forms.Form):
+# --- INITIAL SETUP ---
+class InitialSetupForm(forms.Form):
     saldo_atual = forms.DecimalField(label="Saldo Atual na Conta (R$)", widget=forms.NumberInput(attrs={'class': 'form-control'}))
-    
+
     tem_fatura = forms.BooleanField(label="Tem fatura de cartão em aberto?", required=False, widget=forms.CheckboxInput(attrs={'class': 'form-check-input', 'id': 'check_fatura'}))
     valor_fatura = forms.DecimalField(label="Valor Total da Fatura de Dezembro/Passada", required=False, widget=forms.NumberInput(attrs={'class': 'form-control'}))
-    cartao_fatura = forms.ModelChoiceField(queryset=CartaoCredito.objects.all(), required=False, label="Qual cartão?", widget=forms.Select(attrs={'class': 'form-select'}))
+    cartao_fatura = forms.ModelChoiceField(queryset=CreditCard.objects.all(), required=False, label="Qual cartão?", widget=forms.Select(attrs={'class': 'form-select'}))
 
-# --- CAIXINHAS ---
-class CaixinhaForm(BootstrapModelForm):
+# --- SAVINGS BOXES ---
+class SavingsBoxForm(BootstrapModelForm):
     class Meta:
-        model = Caixinha
-        fields = ['nome', 'descricao', 'saldo_atual', 'meta_cdi', 'meta_valor']
-        widgets = { 
-            'nome': forms.TextInput(attrs={'placeholder': 'Ex: Reserva, Viagem...'}),
-            'meta_valor': forms.NumberInput(attrs={'placeholder': 'Ex: 1500.00 (Opcional)', 'step': '0.01'}),
-            'descricao': forms.Textarea(attrs={'placeholder': 'Escreva aqui o objetivo ou regras dessa caixinha...', 'rows': 3}),
+        model = SavingsBox
+        fields = ['name', 'description', 'current_balance', 'cdi_target_pct', 'target_amount', 'is_emergency_reserve']
+        widgets = {
+            'name': forms.TextInput(attrs={'placeholder': 'Ex: Reserva, Viagem...'}),
+            'target_amount': forms.NumberInput(attrs={'placeholder': 'Ex: 1500.00 (Opcional)', 'step': '0.01'}),
+            'description': forms.Textarea(attrs={'placeholder': 'Escreva aqui o objetivo ou regras dessa caixinha...', 'rows': 3}),
+            'is_emergency_reserve': forms.CheckboxInput(attrs={'role': 'switch'}),
         }
 
-class EmprestimoProprioForm(BootstrapModelForm):
+class SelfLoanForm(BootstrapModelForm):
     class Meta:
-        model = EmprestimoProprio
-        fields = ['caixinha_origem', 'valor_emprestado', 'juros_mensais', 'qtd_parcelas', 'data_inicio']
+        model = SelfLoan
+        fields = ['source_savings_box', 'borrowed_amount', 'monthly_interest_pct', 'installments_count', 'start_date']

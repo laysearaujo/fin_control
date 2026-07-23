@@ -14,16 +14,16 @@
 </div>
 
 <div class="row">
-    {% for box in caixinhas %}
+    {% for box in boxes %}
     <div class="col-md-4 mb-4">
         <div class="card card-custom p-4 h-100 shadow-sm border-start border-4 border-success d-flex flex-column position-relative">
             
             <div class="d-flex justify-content-between align-items-start mb-2">
                 <div>
                     <div class="d-flex align-items-center gap-2">
-                        <h5 class="fw-bold m-0 text-dark">{{ box.nome }}</h5>
+                        <h5 class="fw-bold m-0 text-dark">{{ box.name }}</h5>
                         
-                        {% if box.descricao %}
+                        {% if box.description %}
                             <button class="btn p-0 border-0 text-muted lh-1 btn-setinha" 
                                     type="button" 
                                     data-bs-toggle="collapse" 
@@ -34,7 +34,7 @@
                             </button>
                         {% endif %}
                     </div>
-                    <span class="badge bg-light text-muted border mt-1" style="font-size: 0.75rem;">{{ box.meta_cdi }}% do CDI</span>
+                    <span class="badge bg-light text-muted border mt-1" style="font-size: 0.75rem;">{{ box.cdi_target_pct }}% do CDI</span>
                 </div>
                 
                 <div class="dropdown">
@@ -56,7 +56,7 @@
                         <li>
                             <a class="dropdown-item rounded-2 small text-danger d-flex align-items-center gap-2 py-2" 
                                href="{% url 'apagar_caixinha' box.id %}"
-                               onclick="return confirm('Tem certeza que deseja apagar a caixinha &quot;{{ box.nome }}&quot;? Todo o saldo virtual dela será perdido!')">
+                               onclick="return confirm('Tem certeza que deseja apagar a caixinha &quot;{{ box.name }}&quot;? Todo o saldo virtual dela será perdido!')">
                                 <span>🗑️</span> Excluir Caixinha
                             </a>
                         </li>
@@ -64,29 +64,29 @@
                 </div>
             </div>
 
-            {% if box.descricao %}
+            {% if box.description %}
                 <div class="collapse" id="descCaixinha{{ box.id }}">
                     <div class="mt-2 p-2 bg-light rounded text-muted small border-start border-2 border-secondary" style="font-size: 0.85rem;">
-                        {{ box.descricao|linebreaksbr }}
+                        {{ box.description|linebreaksbr }}
                     </div>
                 </div>
             {% endif %}
             
             <a href="{% url 'detalhes_caixinha' box.id %}" class="text-decoration-none">
-                <h2 class="text-dark fw-bold my-3 hover-saldo">R$ {{ box.saldo_atual|floatformat:2 }}</h2>
+                <h2 class="text-dark fw-bold my-3 hover-saldo">R$ {{ box.current_balance|floatformat:2 }}</h2>
             </a>
             
-            {% if box.meta_valor %}
+            {% if box.target_amount %}
                 <div class="mb-3 p-2 bg-light rounded border border-light-subtle">
                     <div class="d-flex justify-content-between small fw-bold mb-1">
-                        <span class="text-secondary">🎯 Meta: R$ {{ box.meta_valor|floatformat:2 }}</span>
+                        <span class="text-secondary">🎯 Meta: R$ {{ box.target_amount|floatformat:2 }}</span>
                         <span class="text-primary">
-                            {% widthratio box.saldo_atual box.meta_valor 100 as pct %}
+                            {% widthratio box.current_balance box.target_amount 100 as pct %}
                             {{ pct }}%
                         </span>
                     </div>
                     <div class="progress" style="height: 8px;">
-                        <div class="progress-bar bg-primary progress-bar-striped" role="progressbar" style="width: {% widthratio box.saldo_atual box.meta_valor 100 %}%"></div>
+                        <div class="progress-bar bg-primary progress-bar-striped" role="progressbar" style="width: {% widthratio box.current_balance box.target_amount 100 %}%"></div>
                     </div>
                 </div>
             {% endif %}
@@ -95,7 +95,7 @@
                 <span class="text-muted">Rendimento estimado:</span>
                 <div class="d-flex justify-content-between align-items-center">
                     <span>Em 30 dias:</span>
-                    <strong class="text-success">R$ {{ box.projecao_mes_seguinte|floatformat:2 }} 📈</strong>
+                    <strong class="text-success">R$ {{ box.project_next_month|floatformat:2 }} 📈</strong>
                 </div>
             </div>
 
@@ -107,7 +107,7 @@
                 <label class="small text-muted mb-1">Atualizar valor hoje:</label>
                 <div class="input-group input-group-sm">
                     <span class="input-group-text">R$</span>
-                    <input type="number" step="0.01" name="novo_valor" class="form-control" placeholder="{{ box.saldo_atual|stringformat:'.2f' }}">
+                    <input type="number" step="0.01" name="novo_valor" class="form-control" placeholder="{{ box.current_balance|stringformat:'.2f' }}">
                     <button type="submit" class="btn btn-outline-primary">Salvar</button>
                 </div>
             </form>

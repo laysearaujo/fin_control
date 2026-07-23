@@ -8,7 +8,7 @@
             <a href="{% url 'relatorio_categorias' %}?mes={{ mes }}&ano={{ ano }}" class="btn btn-sm btn-light border rounded-pill px-3 mb-2">
                 ⬅️ Voltar para a Central
             </a>
-            <h2 class="fw-bold m-0 text-dark">📁 Detalhamento: {{ categoria.nome }}</h2>
+            <h2 class="fw-bold m-0 text-dark">📁 Detalhamento: {{ category.name }}</h2>
             <p class="text-muted m-0">Lançamentos de <strong>{{ mes }}/{{ ano }}</strong> ordenados pelo maior valor</p>
         </div>
         <div class="text-end">
@@ -30,19 +30,19 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for item in gastos %}
+                    {% for item in expenses %}
                     <tr>
-                        <td class="ps-4 text-muted small">{{ item.data|date:"d/m/Y" }}</td>
+                        <td class="ps-4 text-muted small">{{ item.date|date:"d/m/Y" }}</td>
                         <td>
-                            <span class="fw-bold text-dark">{{ item.descricao }}</span>
+                            <span class="fw-bold text-dark">{{ item.description }}</span>
                         </td>
                         <td>
-                            <span class="badge {% if 'Cartão' in item.tipo %}bg-warning text-dark{% else %}bg-secondary text-white{% endif %}">
-                                {{ item.tipo }}
+                            <span class="badge {% if 'Cartão' in item.type %}bg-warning text-dark{% else %}bg-secondary text-white{% endif %}">
+                                {{ item.type }}
                             </span>
                         </td>
                         <td class="pe-4 text-end fw-bold text-danger">
-                            - R$ {{ item.valor|floatformat:2 }}
+                            - R$ {{ item.amount|floatformat:2 }}
                         </td>
                     </tr>
                     {% empty %}
