@@ -91,6 +91,8 @@ class Transacao(models.Model):
     conta_avulsa = models.ForeignKey('ContaAvulsa', on_delete=models.SET_NULL, null=True, blank=True)
 
     caixinha_destino = models.ForeignKey('Caixinha', on_delete=models.SET_NULL, null=True, blank=True)
+    caixinha_origem = models.ForeignKey('Caixinha', on_delete=models.SET_NULL, null=True, blank=True, related_name='transacoes_saida')
+    eh_movimentacao_interna = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)

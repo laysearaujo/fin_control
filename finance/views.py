@@ -71,7 +71,7 @@ def dashboard(request):
     
     # A. Saldo Real HOJE
     r_hoje = Receita.objects.filter(data__lte=data_hoje).aggregate(Sum('valor'))['valor__sum'] or 0
-    d_hoje = Transacao.objects.filter(eh_cartao=False, data_compra__lte=data_hoje).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
+    d_hoje = Transacao.objects.filter(eh_cartao=False, eh_movimentacao_interna=False, data_compra__lte=data_hoje).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
     saldo_base = r_hoje - d_hoje
 
     # B. Pendências do Mês Atual (Janeiro)
@@ -138,7 +138,7 @@ def dashboard(request):
 
     else:
         hist_r = Receita.objects.filter(data__lt=data_ref).aggregate(Sum('valor'))['valor__sum'] or 0
-        hist_d = Transacao.objects.filter(eh_cartao=False, data_compra__lt=data_ref).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
+        hist_d = Transacao.objects.filter(eh_cartao=False, eh_movimentacao_interna=False, data_compra__lt=data_ref).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
         saldo_anterior = hist_r - hist_d
 
     # =========================================================================
@@ -170,7 +170,7 @@ def dashboard(request):
     receitas_reais_mes = Receita.objects.filter(data__month=data_ref.month, data__year=data_ref.year).aggregate(Sum('valor'))['valor__sum'] or 0
     
     # 2. Saídas Reais 
-    saidas_reais_mes = Transacao.objects.filter(eh_cartao=False, data_compra__month=data_ref.month, data_compra__year=data_ref.year).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
+    saidas_reais_mes = Transacao.objects.filter(eh_cartao=False, eh_movimentacao_interna=False, data_compra__month=data_ref.month, data_compra__year=data_ref.year).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
     
     # Ajusta a projeção caso você ganhe um dinheiro extra no mês (além do fixo)
     falta_entrar = total_receitas_previsto - receitas_reais_mes
@@ -301,7 +301,9 @@ def detalhes_caixinha(request, id):
     caixinha = get_object_or_404(Caixinha, id=id)
     
     # 1. Busca todos os aportes/histórico vinculados a essa caixinha
-    historico = Transacao.objects.filter(caixinha_destino=caixinha).order_by('-data_compra')
+    historico = Transacao.objects.filter(
+        Q(caixinha_destino=caixinha) | Q(caixinha_origem=caixinha)
+    ).order_by('-data_compra')
     
     # 2. Lógica da Meta
     falta_para_meta = 0
@@ -387,9 +389,10 @@ def resgatar_caixinha(request):
             valor_total=valor_resgate,
             categoria=categoria_obj,
             data_compra=timezone.now().date(),
-            caixinha_destino=caixinha, # Vínculo direto com a caixinha
-            eh_cartao=False, # Resgate sempre sai do saldo
-            eh_pagamento_fatura=False
+            caixinha_origem=caixinha, # Vínculo direto com a caixinha (a caixinha é a ORIGEM do dinheiro no resgate)
+            eh_cartao=False,
+            eh_pagamento_fatura=False,
+            eh_movimentacao_interna=True, # Não é despesa real: dinheiro só mudou de lugar, não abate o saldo geral
         )
 
         messages.success(request, f"Resgate de R$ {valor_resgate:.2f} realizado com sucesso da caixinha '{caixinha.nome}'!")
@@ -658,9 +661,10 @@ def gerenciar_categorias(request):
     for cat in categorias:
         # Soma o que já foi gasto nesta categoria no mês/ano selecionados
         gasto_debito = Transacao.objects.filter(
-            categoria=cat, 
-            eh_cartao=False, 
-            data_compra__month=data_ref.month, 
+            categoria=cat,
+            eh_cartao=False,
+            eh_movimentacao_interna=False,
+            data_compra__month=data_ref.month,
             data_compra__year=data_ref.year
         ).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
         
@@ -987,7 +991,7 @@ def relatorio_categorias(request):
         ).exists()
 
         avulsos = Transacao.objects.filter(
-            eh_cartao=False, eh_pagamento_fatura=False, data_compra__month=m, data_compra__year=a
+            eh_cartao=False, eh_pagamento_fatura=False, eh_movimentacao_interna=False, data_compra__month=m, data_compra__year=a
         ).aggregate(t=Sum('valor_total'))['t'] or 0.0
         
         parc = Parcela.objects.filter(
@@ -1007,7 +1011,7 @@ def relatorio_categorias(request):
         aportes = 0.0
         if tem_movimentacao_real:
             avulsos_ap = Transacao.objects.filter(
-                eh_cartao=False, eh_pagamento_fatura=False, data_compra__month=m, data_compra__year=a
+                eh_cartao=False, eh_pagamento_fatura=False, eh_movimentacao_interna=False, data_compra__month=m, data_compra__year=a
             ).select_related('categoria')
             
             parc_ap = Parcela.objects.filter(
@@ -1038,7 +1042,7 @@ def relatorio_categorias(request):
     # 2. DADOS DO MÊS SELECIONADO (PIZZA E APORTES)
     # ==========================================
     gastos_avulsos = Transacao.objects.filter(
-        eh_cartao=False, eh_pagamento_fatura=False, data_compra__month=mes, data_compra__year=ano
+        eh_cartao=False, eh_pagamento_fatura=False, eh_movimentacao_interna=False, data_compra__month=mes, data_compra__year=ano
     ).values('categoria__id', 'categoria__nome').annotate(total=Sum('valor_total'))
 
     parcelas = Parcela.objects.filter(
@@ -1227,7 +1231,7 @@ def relatorio_anual(request):
 
     # 1. Pega o saldo real do último dia do ano anterior (Base de cálculo)
     r_hist = Receita.objects.filter(data__lt=date(ano, 1, 1)).aggregate(Sum('valor'))['valor__sum'] or 0
-    d_hist = Transacao.objects.filter(eh_cartao=False, data_compra__lt=date(ano, 1, 1)).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
+    d_hist = Transacao.objects.filter(eh_cartao=False, eh_movimentacao_interna=False, data_compra__lt=date(ano, 1, 1)).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
     saldo_acumulado = r_hist - d_hist
 
     for i in range(1, 13):
@@ -1240,7 +1244,7 @@ def relatorio_anual(request):
             # MESES PASSADOS: Saldo real exato cravado no último dia do mês
             data_limite = data_ref + relativedelta(months=1)
             r_total = Receita.objects.filter(data__lt=data_limite).aggregate(Sum('valor'))['valor__sum'] or 0
-            d_total = Transacao.objects.filter(eh_cartao=False, data_compra__lt=data_limite).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
+            d_total = Transacao.objects.filter(eh_cartao=False, eh_movimentacao_interna=False, data_compra__lt=data_limite).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
             
             saldo = r_total - d_total
             saldo_acumulado = saldo # Atualiza a bola de neve real
@@ -1258,11 +1262,12 @@ def relatorio_anual(request):
             
             # Pega também os gastos que você já fez no débito (ex: padaria) para não ignorar o que já foi gasto hoje
             gastos_extras_debito = Transacao.objects.filter(
-                eh_cartao=False, 
+                eh_cartao=False,
                 eh_pagamento_fatura=False,
+                eh_movimentacao_interna=False,
                 gasto_fixo__isnull=True,    # Ignora fixos (para não cobrar 2x)
                 conta_avulsa__isnull=True,  # Ignora avulsas (para não cobrar 2x)
-                data_compra__month=i, 
+                data_compra__month=i,
                 data_compra__year=ano
             ).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
             
@@ -1295,6 +1300,7 @@ def detalhes_gastos_categoria(request, categoria_id):
         categoria=categoria,
         eh_cartao=False,
         eh_pagamento_fatura=False,
+        eh_movimentacao_interna=False,
         data_compra__month=mes,
         data_compra__year=ano
     )
