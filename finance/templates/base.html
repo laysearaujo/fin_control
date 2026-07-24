@@ -30,32 +30,34 @@
         </button>
         
         <div class="collapse navbar-collapse" id="navbarNav">
+            {% with url_name=request.resolver_match.url_name %}
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'extrato' %}">📜 Extrato</a>
+                    <a class="nav-link {% if url_name == 'extrato' %}fw-bold text-white{% endif %}" href="{% url 'extrato' %}">📜 Extrato</a>
                 </li>
 
                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'caixinhas' %}">🐖 Caixinhas</a>
+                    <a class="nav-link {% if url_name == 'caixinhas' %}fw-bold text-white{% endif %}" href="{% url 'caixinhas' %}">🐖 Caixinhas</a>
                 </li>
 
                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'relatorio_categorias' %}">📈 Análises</a>
+                    <a class="nav-link {% if url_name == 'relatorio_categorias' %}fw-bold text-white{% endif %}" href="{% url 'relatorio_categorias' %}">📈 Análises</a>
                 </li>
 
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle text-white-50" href="#" role="button" data-bs-toggle="dropdown">
+                    <a class="nav-link dropdown-toggle {% if url_name == 'gerenciar_fixos' or url_name == 'gerenciar_receitas_fixas' or url_name == 'gerenciar_cartoes' or url_name == 'nova_categoria' %}fw-bold text-white{% else %}text-white-50{% endif %}" href="#" role="button" data-bs-toggle="dropdown">
                         ⚙️ Cadastros Fixos
                     </a>
                     <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="{% url 'gerenciar_fixos' %}">🏠 Gastos Recorrentes</a></li>
-                        <li><a class="dropdown-item" href="{% url 'gerenciar_receitas_fixas' %}">💰 Salários e Entradas</a></li>
+                        <li><a class="dropdown-item {% if url_name == 'gerenciar_fixos' %}fw-bold{% endif %}" href="{% url 'gerenciar_fixos' %}">🏠 Gastos Recorrentes</a></li>
+                        <li><a class="dropdown-item {% if url_name == 'gerenciar_receitas_fixas' %}fw-bold{% endif %}" href="{% url 'gerenciar_receitas_fixas' %}">💰 Salários e Entradas</a></li>
                         <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item" href="{% url 'gerenciar_cartoes' %}">💳 Cartões de Crédito</a></li>
-                        <li><a class="dropdown-item" href="{% url 'nova_categoria' %}">📂 Nova Categoria</a></li>
+                        <li><a class="dropdown-item {% if url_name == 'gerenciar_cartoes' %}fw-bold{% endif %}" href="{% url 'gerenciar_cartoes' %}">💳 Cartões de Crédito</a></li>
+                        <li><a class="dropdown-item {% if url_name == 'nova_categoria' %}fw-bold{% endif %}" href="{% url 'nova_categoria' %}">📂 Nova Categoria</a></li>
                     </ul>
                 </li>
             </ul>
+            {% endwith %}
             
             <div class="d-flex gap-2 mt-3 mt-lg-0">
                 <a href="{% url 'nova_transacao' %}" class="btn btn-danger btn-sm rounded-pill px-3 fw-bold">+ Despesa</a>
