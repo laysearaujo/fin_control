@@ -14,8 +14,53 @@
             ⬅️ Voltar
         </a>
     </div>
+<!-- 
+    <form method="GET" class="card border-0 shadow-sm rounded-4 p-3 mb-4">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-3 col-6">
+                <label class="form-label text-muted small fw-bold mb-1">MÊS</label>
+                <select name="mes" class="form-select" onchange="this.form.submit()">
+                    <option value="">Todos</option>
+                    {% for num, nome in months_pt %}
+                        <option value="{{ num }}" {% if selected_month == num %}selected{% endif %}>{{ nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2 col-6">
+                <label class="form-label text-muted small fw-bold mb-1">ANO</label>
+                <select name="ano" class="form-select" onchange="this.form.submit()">
+                    <option value="">Todos</option>
+                    {% for ano in available_years %}
+                        <option value="{{ ano }}" {% if selected_year == ano %}selected{% endif %}>{{ ano }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label text-muted small fw-bold mb-1">BUSCAR POR DESCRIÇÃO</label>
+                <input type="text" name="q" class="form-control" placeholder="Ex: Netflix, Mercado..." value="{{ query }}">
+            </div>
+            <div class="col-md-2 d-flex gap-2">
+                <button type="submit" class="btn btn-primary rounded-pill px-4 flex-grow-1">🔍 Buscar</button>
+                {% if selected_month or selected_year or query %}
+                    <a href="{% url 'extrato' %}" class="btn btn-outline-secondary rounded-pill px-3" title="Limpar filtros">✕</a>
+                {% endif %}
+            </div>
+        </div>
+    </form> -->
 
-    <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+    {% for group in grouped_movements %}
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3 px-4 user-select-none" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#mes-{{ forloop.counter }}" aria-expanded="{% if group.is_current_month %}true{% else %}false{% endif %}">
+            <h5 class="fw-bold m-0 text-capitalize">
+                <span class="mes-chevron">▾</span>
+                {{ group.month_date|date:"F Y" }}
+            </h5>
+            <div class="d-flex gap-3">
+                <span class="small fw-bold text-success">+ R$ {{ group.total_income|floatformat:2 }}</span>
+                <span class="small fw-bold text-danger">- R$ {{ group.total_expense|floatformat:2 }}</span>
+            </div>
+        </div>
+        <div class="collapse {% if group.is_current_month %}show{% endif %}" id="mes-{{ forloop.counter }}">
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead class="bg-light">
@@ -27,7 +72,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for item in movements %}
+                    {% for item in group.items %}
                     <tr>
                         <td class="ps-4 text-muted" style="white-space: nowrap;">
                             {{ item.date|date:"d/m/Y" }}
@@ -53,8 +98,8 @@
 
                         <td class="pe-4 text-end">
                             {% if item.source_model == 'transaction' %}
-                                <a href="{% url 'editar_transacao' item.id %}" 
-                                   class="btn btn-sm btn-outline-primary border-0 rounded-circle p-2 me-1" 
+                                <a href="{% url 'editar_transacao' item.id %}"
+                                   class="btn btn-sm btn-outline-primary border-0 rounded-circle p-2 me-1"
                                    title="Editar Despesa">
                                     ✏️
                                 </a>
@@ -66,9 +111,9 @@
                                 </a>
                             {% endif %}
 
-                            <button type="button" 
-                                    class="btn btn-sm btn-outline-danger border-0 rounded-circle p-2" 
-                                    data-bs-toggle="modal" 
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-danger border-0 rounded-circle p-2"
+                                    data-bs-toggle="modal"
                                     data-bs-target="#modalApagar{{ item.source_model }}{{ item.id }}"
                                     title="Excluir item">
                                 🗑️
@@ -77,7 +122,7 @@
                             <div class="modal fade text-start" id="modalApagar{{ item.source_model }}{{ item.id }}" tabindex="-1">
                                 <div class="modal-dialog modal-dialog-centered">
                                     <div class="modal-content border-0 shadow">
-                                        
+
                                         <div class="modal-header bg-danger text-white border-0">
                                             <h5 class="modal-title fw-bold">Excluir Movimentação?</h5>
                                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -94,7 +139,7 @@
 
                                         <div class="modal-footer justify-content-center border-0 pb-4">
                                             <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
-                                            
+
                                             {% if item.source_model == 'income' %}
                                                 <a href="{% url 'excluir_receita' item.id %}" class="btn btn-danger rounded-pill px-4 fw-bold">
                                                     Sim, Apagar Receita
@@ -110,18 +155,30 @@
                             </div>
                         </td>
                     </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="4" class="text-center py-5 text-muted">
-                            <span class="fs-1 d-block mb-2">📭</span>
-                            Nenhuma movimentação encontrada.
-                        </td>
-                    </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
+        </div>
     </div>
+    {% empty %}
+    <div class="card border-0 shadow-sm rounded-4">
+        <div class="text-center py-5 text-muted">
+            <span class="fs-1 d-block mb-2">📭</span>
+            Nenhuma movimentação encontrada.
+        </div>
+    </div>
+    {% endfor %}
 </div>
+
+<style>
+    .mes-chevron {
+        display: inline-block;
+        transition: transform 0.2s ease;
+    }
+    [aria-expanded="false"] .mes-chevron {
+        transform: rotate(-90deg);
+    }
+</style>
 
 {% endblock %}

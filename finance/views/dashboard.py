@@ -210,26 +210,21 @@ def dashboard(request):
     fixed_items_status = []
     total_pending_bank = 0  # Unified variable
 
-    # A. Fixed expenses
-    for expense in FixedExpense.objects.all():
-        if expense.is_credit_card:
-            # Credit card subscriptions are settled in a lump sum when the invoice is paid,
-            # never individually - so as far as the "to-do list" goes, they're already handled
-            status = 'paid'
-            amount_paid = expense.expected_amount
-        else:
-            payment = Transaction.objects.filter(fixed_expense=expense, purchase_date__month=ref_date.month, purchase_date__year=ref_date.year).first()
-            status = 'paid' if payment else 'pending'
-            amount_paid = payment.total_amount if payment else 0
-            if status == 'pending':
-                total_pending_bank += expense.expected_amount
+    # A. Fixed expenses (credit card subscriptions are left out - they already show up in
+    # the "Fatura do Cartão" card, no need to duplicate them here)
+    for expense in FixedExpense.objects.filter(is_credit_card=False):
+        payment = Transaction.objects.filter(fixed_expense=expense, purchase_date__month=ref_date.month, purchase_date__year=ref_date.year).first()
+        status = 'paid' if payment else 'pending'
+        amount_paid = payment.total_amount if payment else 0
+        if status == 'pending':
+            total_pending_bank += expense.expected_amount
 
         is_overdue = is_current and status == 'pending' and today.day > expense.due_day
 
         fixed_items_status.append({
             'id': expense.id, 'name': expense.name, 'status': status,
             'expected_amount': expense.expected_amount, 'paid_amount': amount_paid,
-            'day': expense.due_day, 'is_credit_card': expense.is_credit_card, 'kind': 'fixed',
+            'day': expense.due_day, 'is_credit_card': False, 'kind': 'fixed',
             'is_overdue': is_overdue,
         })
 
@@ -270,10 +265,10 @@ def dashboard(request):
     projected_balance = current_real_balance + income_still_expected - total_remaining_to_pay
     forecast_total_expenses = month_actual_expenses + total_remaining_to_pay
 
-    # Last 5 movements (income + expenses combined), so you can glance at the dashboard and
-    # immediately see what just happened, without having to open the full statement
-    recent_income = Income.objects.order_by('-date', '-id')[:5]
-    recent_expenses = Transaction.objects.order_by('-purchase_date', '-id')[:5]
+    # Last 5 movements of the month being viewed (income + expenses combined), so you can
+    # glance at the dashboard and immediately see what happened in that month
+    recent_income = Income.objects.filter(date__month=ref_date.month, date__year=ref_date.year).order_by('-date', '-id')[:5]
+    recent_expenses = Transaction.objects.filter(purchase_date__month=ref_date.month, purchase_date__year=ref_date.year).order_by('-purchase_date', '-id')[:5]
 
     recent_movements = []
     for income in recent_income:

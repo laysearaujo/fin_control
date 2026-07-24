@@ -2,11 +2,12 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.db import transaction
 from django.utils import timezone
-from datetime import datetime
+from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 
 from ..models import Transaction, Income, FixedIncome, Installment
 from ..forms import TransactionForm, IncomeForm
+from .reports import MESES_PT
 
 
 def new_transaction(request):
@@ -76,13 +77,37 @@ def new_income(request):
 
 
 def statement(request):
-    """Lists every movement (income and expenses)"""
+    """Lists every movement (income and expenses), filterable by month/year and by text search"""
+
+    month_param = request.GET.get('mes')
+    year_param = request.GET.get('ano')
+    query = request.GET.get('q', '').strip()
+
+    selected_month = None
+    selected_year = None
+    try:
+        if month_param and year_param:
+            selected_month = int(month_param)
+            selected_year = int(year_param)
+    except ValueError:
+        selected_month = None
+        selected_year = None
 
     # 1. Fetches income entries
-    income_entries = Income.objects.all().order_by('-date')
+    income_entries = Income.objects.all()
+    if selected_month and selected_year:
+        income_entries = income_entries.filter(date__month=selected_month, date__year=selected_year)
+    if query:
+        income_entries = income_entries.filter(description__icontains=query)
+    income_entries = income_entries.order_by('-date')
 
     # 2. Fetches expense entries
-    expense_entries = Transaction.objects.all().order_by('-purchase_date')
+    expense_entries = Transaction.objects.all()
+    if selected_month and selected_year:
+        expense_entries = expense_entries.filter(purchase_date__month=selected_month, purchase_date__year=selected_year)
+    if query:
+        expense_entries = expense_entries.filter(description__icontains=query)
+    expense_entries = expense_entries.order_by('-purchase_date')
 
     # 3. Merges both lists manually
     movements = []
@@ -111,7 +136,46 @@ def statement(request):
     # 4. Sorts the final list by date (most recent first)
     movements.sort(key=lambda x: x['date'], reverse=True)
 
-    return render(request, 'statement.html', {'movements': movements})
+    # 5. Groups the movements by month, so the statement reads as a timeline instead of
+    # one giant flat list. Only the current month starts expanded - the rest start
+    # collapsed, since older months are just there for reference
+    today = timezone.now().date()
+    grouped_movements = []
+    current_group = None
+    for movement in movements:
+        month_key = (movement['date'].year, movement['date'].month)
+        if current_group is None or current_group['key'] != month_key:
+            current_group = {
+                'key': month_key,
+                'month_date': date(movement['date'].year, movement['date'].month, 1),
+                'items': [],
+                'total_income': 0,
+                'total_expense': 0,
+                # Expanded by default when it's today's real month, or when a mes/ano
+                # filter narrowed the statement down to exactly this one
+                'is_current_month': month_key == (today.year, today.month) or month_key == (selected_year, selected_month),
+            }
+            grouped_movements.append(current_group)
+
+        current_group['items'].append(movement)
+        if movement['kind'] == 'income':
+            current_group['total_income'] += movement['amount']
+        else:
+            current_group['total_expense'] += movement['amount']
+
+    # 6. Every year that actually has data, so the year dropdown only offers real options
+    years_with_data = {d.year for d in Income.objects.dates('date', 'year')}
+    years_with_data.update(d.year for d in Transaction.objects.dates('purchase_date', 'year'))
+    available_years = sorted(years_with_data, reverse=True) or [timezone.now().year]
+
+    return render(request, 'statement.html', {
+        'grouped_movements': grouped_movements,
+        'available_years': available_years,
+        'months_pt': sorted(MESES_PT.items()),
+        'selected_month': selected_month,
+        'selected_year': selected_year,
+        'query': query,
+    })
 
 
 def edit_transaction(request, id):
