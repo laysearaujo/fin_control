@@ -323,7 +323,7 @@
         <div class="card border-0 shadow-sm rounded-4 h-100">
             <div class="card-header bg-white border-0 pt-4 px-4 d-flex justify-content-between align-items-center">
                 <div>
-                    <h6 class="fw-bold m-0">💳 Fatura do Cartão</h6>
+                    <h6 class="fw-bold m-0">💳 Fatura{% if cards_total_count > 1 %}s{% endif %} do Cartão</h6>
                     <small class="text-muted" style="font-size: 0.7rem;">Vence em {{ ref_date|date:"F" }}</small>
                 </div>
                 <button type="button" class="btn btn-sm btn-outline-dark rounded-pill" data-bs-toggle="modal" data-bs-target="#modalFatura">
@@ -334,18 +334,22 @@
             <div class="card-body px-4 pb-4 pt-2 d-flex flex-column">
                 {% if invoice_paid %}
                     <div class="text-center py-2">
-                        <span class="badge bg-success bg-opacity-10 text-success mb-2">✅ Fatura paga</span>
+                        <span class="badge bg-success bg-opacity-10 text-success mb-2">✅ Fatura{% if cards_total_count > 1 %}s pagas{% else %} paga{% endif %}</span>
                         <h4 class="fw-bold text-success mb-0 valor-sensivel">R$ {{ invoice_total|floatformat:2 }}</h4>
                         <small class="text-muted">Foi o que você pagou</small>
                     </div>
                 {% else %}
                     <div class="text-center py-2">
-                        <small class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">Total da Fatura</small>
-                        <h3 class="fw-bold text-dark valor-sensivel my-1">R$ {{ invoice_total|floatformat:2 }}</h3>
+                        <small class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">Total a Pagar</small>
+                        <h3 class="fw-bold text-dark valor-sensivel my-1">R$ {{ invoice_pending_total|floatformat:2 }}</h3>
 
-                        {% if not is_past and invoice_total > 0 %}
-                            <button type="button" class="btn btn-dark btn-sm w-100 rounded-pill py-2 mt-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#modalConfirmarPgto">
-                               Pagar Fatura Agora
+                        {% if cards_total_count > 1 %}
+                            <span class="badge bg-light text-secondary border">{{ cards_paid_count }}/{{ cards_total_count }} cartões pagos</span>
+                        {% endif %}
+
+                        {% if not is_past and invoice_pending_total > 0 %}
+                            <button type="button" class="btn btn-dark btn-sm w-100 rounded-pill py-2 mt-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#modalFatura">
+                               Ver e Pagar
                             </button>
                         {% endif %}
                     </div>
@@ -400,56 +404,67 @@
     </div>
 </div>
 
-<div class="modal fade" id="modalConfirmarPgto" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header bg-dark text-white border-0">
-                <h5 class="modal-title fw-bold">💸 Confirmar Pagamento</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body text-center py-5">
-                <h5 class="mb-3">Você vai pagar a fatura de <strong>{{ ref_date|date:"F/Y" }}</strong>?</h5>
-                <h1 class="text-danger fw-bold my-3 valor-sensivel">R$ {{ invoice_total|floatformat:2 }}</h1>
-                <p class="text-muted">Esse valor será descontado do seu saldo atual.</p>
-            </div>
-            <div class="modal-footer justify-content-center border-0 pb-4">
-                <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
-                <a href="{% url 'pagar_fatura_mensal' %}?mes={{ ref_date.month }}&ano={{ ref_date.year }}" class="btn btn-success rounded-pill px-5 fw-bold">
-                    Sim, Pagar!
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
-
 <div class="modal fade" id="modalFatura" tabindex="-1">
-    <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-dialog modal-dialog-scrollable modal-lg">
         <div class="modal-content border-0 shadow">
             <div class="modal-header">
-                <h5 class="modal-title fw-bold">Detalhes da Fatura ({{ ref_date|date:"F/Y" }})</h5>
+                <h5 class="modal-title fw-bold">Detalhes da{% if cards_total_count > 1 %}s Faturas{% else %} Fatura{% endif %} ({{ ref_date|date:"F/Y" }})</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <ul class="list-group list-group-flush">
-                    {% for item in invoice_line_items %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                {% for card_invoice in cards_invoice %}
+                <div class="mb-4 {% if not forloop.last %}pb-4 border-bottom{% endif %}">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold m-0">💳 {{ card_invoice.card.name }}</h6>
+                        {% if card_invoice.paid %}
+                            <span class="badge bg-success bg-opacity-10 text-success">✅ Paga</span>
+                        {% else %}
+                            <span class="badge bg-warning bg-opacity-10 text-warning border border-warning">Pendente</span>
+                        {% endif %}
+                    </div>
+
+                    <ul class="list-group list-group-flush mb-2">
+                        {% for item in card_invoice.line_items %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                            <div>
+                                {{ item.description }}
+                                {% if item.kind == 'fixed' %}
+                                    <span class="badge bg-info text-dark ms-1" style="font-size:0.65em">ASSINATURA</span>
+                                {% endif %}
+                            </div>
+                            <span class="fw-bold valor-sensivel">R$ {{ item.amount }}</span>
+                        </li>
+                        {% empty %}
+                        <li class="list-group-item text-center text-muted py-3 px-0">Nada consta nesta fatura.</li>
+                        {% endfor %}
+                    </ul>
+
+                    <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            {{ item.description }}
-                            {% if item.kind == 'fixed' %}
-                                <span class="badge bg-info text-dark ms-1" style="font-size:0.65em">ASSINATURA</span>
-                            {% endif %}
+                            <strong>Total: </strong>
+                            <strong class="valor-sensivel">R$ {{ card_invoice.total|floatformat:2 }}</strong>
+                            <div class="text-muted" style="font-size: 0.75rem;">🔮 Já acumulado pro próximo mês: R$ {{ card_invoice.next_total|floatformat:2 }}</div>
                         </div>
-                        <span class="fw-bold valor-sensivel">R$ {{ item.amount }}</span>
-                    </li>
-                    {% empty %}
-                    <li class="list-group-item text-center text-muted py-4">Nada consta nesta fatura.</li>
-                    {% endfor %}
-                </ul>
+
+                        {% if not card_invoice.paid and not is_past and card_invoice.total > 0 %}
+                        <a href="{% url 'pagar_fatura_mensal' card_invoice.card.id %}?mes={{ ref_date.month }}&ano={{ ref_date.year }}"
+                           class="btn btn-sm btn-success rounded-pill fw-bold px-3"
+                           onclick="return confirm('Confirma o pagamento de R$ {{ card_invoice.total|floatformat:2 }} da fatura do cartão {{ card_invoice.card.name }}? Esse valor será descontado do seu saldo atual.')">
+                            Pagar R$ {{ card_invoice.total|floatformat:2 }}
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-center text-muted py-4">Nenhum cartão cadastrado ainda. <a href="{% url 'novo_cartao' %}">Cadastrar um cartão</a>.</p>
+                {% endfor %}
             </div>
+            {% if cards_total_count > 1 %}
             <div class="modal-footer bg-light justify-content-between">
-                <strong>TOTAL FATURA:</strong>
+                <strong>TOTAL GERAL:</strong>
                 <strong class="text-danger valor-sensivel fs-5">R$ {{ invoice_total|floatformat:2 }}</strong>
             </div>
+            {% endif %}
         </div>
     </div>
 </div>

@@ -57,7 +57,7 @@ urlpatterns = [
     path('relatorios/anual/', views.annual_report, name='relatorio_anual'),
     path('relatorios/categorias/detalhes/<int:categoria_id>/', views.category_expense_detail, name='detalhes_gastos_categoria'),
 
-    path('fatura/pagar/', views.pay_monthly_invoice, name='pagar_fatura_mensal'),
+    path('fatura/pagar/<int:cartao_id>/', views.pay_monthly_invoice, name='pagar_fatura_mensal'),
 
     path('adicionar-conta-avulsa/', views.add_one_off_bill, name='adicionar_conta_avulsa'),
     path('pagar-conta-avulsa/<int:id>/', views.pay_one_off_bill, name='pagar_conta_avulsa'),

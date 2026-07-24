@@ -72,14 +72,16 @@ def dashboard(request):
         if not paid:
             base_balance -= bill.amount
 
-    # Current month's credit card invoice
-    if not Transaction.objects.filter(is_invoice_payment=True, invoice_month=today.month, invoice_year=today.year).exists():
-        installments_sum = Installment.objects.filter(due_date__month=today.month, due_date__year=today.year).aggregate(Sum('amount'))['amount__sum'] or 0
-        subscriptions_sum = 0
-        for expense in FixedExpense.objects.filter(is_credit_card=True):
-            if not Transaction.objects.filter(fixed_expense=expense, purchase_date__month=today.month, purchase_date__year=today.year).exists():
-                subscriptions_sum += expense.expected_amount
-        base_balance -= (installments_sum + subscriptions_sum)
+    # Current month's credit card invoices (checked per card - paying one doesn't pay them all)
+    for card in CreditCard.objects.all():
+        card_already_paid = Transaction.objects.filter(is_invoice_payment=True, invoice_month=today.month, invoice_year=today.year, credit_card=card).exists()
+        if not card_already_paid:
+            installments_sum = Installment.objects.filter(transaction__credit_card=card, due_date__month=today.month, due_date__year=today.year).aggregate(Sum('amount'))['amount__sum'] or 0
+            subscriptions_sum = 0
+            for expense in FixedExpense.objects.filter(is_credit_card=True, credit_card=card):
+                if not Transaction.objects.filter(fixed_expense=expense, purchase_date__month=today.month, purchase_date__year=today.year).exists():
+                    subscriptions_sum += expense.expected_amount
+            base_balance -= (installments_sum + subscriptions_sum)
 
     # =========================================================================
     # 2. PREVIOUS BALANCE (CASCADING LOOP)
@@ -121,33 +123,64 @@ def dashboard(request):
     # 3. SCREEN DATA
     # =========================================================================
 
-    # Credit card invoice
-    invoice_line_items = []
-    invoice_installments = Installment.objects.filter(due_date__month=ref_date.month, due_date__year=ref_date.year).select_related('transaction')
-    installments_total = invoice_installments.aggregate(Sum('amount'))['amount__sum'] or 0
-    for installment in invoice_installments:
-        invoice_line_items.append({'description': f"{installment.transaction.description} ({installment.installment_number}/{installment.transaction.installments_count})", 'amount': installment.amount, 'kind': 'purchase'})
-
-    subscriptions_total = 0
-    credit_card_fixed_expenses = FixedExpense.objects.filter(is_credit_card=True)
-    for expense in credit_card_fixed_expenses:
-        already_posted = Transaction.objects.filter(fixed_expense=expense, purchase_date__month=ref_date.month, purchase_date__year=ref_date.year).exists()
-        if not already_posted:
-            subscriptions_total += expense.expected_amount
-            invoice_line_items.append({'description': f"{expense.name} (Assinatura)", 'amount': expense.expected_amount, 'kind': 'fixed'})
-
-    month_invoice_total = installments_total + subscriptions_total
-
-    # What's already accumulating for NEXT month's invoice (installments already scheduled +
-    # subscriptions not yet posted), so purchases made today don't sneak up unnoticed
+    # Credit card invoices, broken down per card (a household can have more than one)
     next_invoice_month = ref_date + relativedelta(months=1)
-    next_installments_total = Installment.objects.filter(due_date__month=next_invoice_month.month, due_date__year=next_invoice_month.year).aggregate(Sum('amount'))['amount__sum'] or 0
-    next_subscriptions_total = 0
-    for expense in credit_card_fixed_expenses:
-        already_posted_next = Transaction.objects.filter(fixed_expense=expense, purchase_date__month=next_invoice_month.month, purchase_date__year=next_invoice_month.year).exists()
-        if not already_posted_next:
-            next_subscriptions_total += expense.expected_amount
-    next_invoice_total = next_installments_total + next_subscriptions_total
+    cards_invoice = []
+
+    for card in CreditCard.objects.all():
+        line_items = []
+
+        card_installments = Installment.objects.filter(
+            transaction__credit_card=card, due_date__month=ref_date.month, due_date__year=ref_date.year
+        ).select_related('transaction')
+        installments_total = card_installments.aggregate(Sum('amount'))['amount__sum'] or 0
+        for installment in card_installments:
+            line_items.append({
+                'description': f"{installment.transaction.description} ({installment.installment_number}/{installment.transaction.installments_count})",
+                'amount': installment.amount, 'kind': 'purchase',
+            })
+
+        card_fixed_expenses = FixedExpense.objects.filter(is_credit_card=True, credit_card=card)
+        subscriptions_total = 0
+        for expense in card_fixed_expenses:
+            already_posted = Transaction.objects.filter(fixed_expense=expense, purchase_date__month=ref_date.month, purchase_date__year=ref_date.year).exists()
+            if not already_posted:
+                subscriptions_total += expense.expected_amount
+                line_items.append({'description': f"{expense.name} (Assinatura)", 'amount': expense.expected_amount, 'kind': 'fixed'})
+
+        card_total = installments_total + subscriptions_total
+        card_paid = Transaction.objects.filter(is_invoice_payment=True, invoice_month=ref_date.month, invoice_year=ref_date.year, credit_card=card).exists()
+
+        # What's already accumulating for NEXT month's invoice (installments already scheduled +
+        # subscriptions not yet posted), so purchases made today don't sneak up unnoticed
+        next_installments_total = Installment.objects.filter(
+            transaction__credit_card=card, due_date__month=next_invoice_month.month, due_date__year=next_invoice_month.year
+        ).aggregate(Sum('amount'))['amount__sum'] or 0
+        next_subscriptions_total = 0
+        for expense in card_fixed_expenses:
+            already_posted_next = Transaction.objects.filter(fixed_expense=expense, purchase_date__month=next_invoice_month.month, purchase_date__year=next_invoice_month.year).exists()
+            if not already_posted_next:
+                next_subscriptions_total += expense.expected_amount
+        card_next_total = next_installments_total + next_subscriptions_total
+
+        cards_invoice.append({
+            'card': card,
+            'line_items': line_items,
+            'total': card_total,
+            'paid': card_paid,
+            'next_total': card_next_total,
+        })
+
+    month_invoice_total = sum(c['total'] for c in cards_invoice)
+    invoice_pending_total = sum(c['total'] for c in cards_invoice if not c['paid'])
+    next_invoice_total = sum(c['next_total'] for c in cards_invoice)
+
+    # A card with nothing due this month isn't "unpaid" - it just had no invoice,
+    # so it's left out of the paid/pending ratio to avoid a contradictory badge
+    active_cards = [c for c in cards_invoice if c['total'] > 0]
+    all_invoices_paid = all(c['paid'] for c in active_cards) if active_cards else True
+    cards_paid_count = sum(1 for c in active_cards if c['paid'])
+    cards_total_count = len(active_cards)
 
     # The base forecast is just your fixed salary
     total_fixed_income = FixedIncome.objects.aggregate(Sum('amount'))['amount__sum'] or 0
@@ -228,10 +261,7 @@ def dashboard(request):
     fixed_items_total_count = len(fixed_items_status)
 
     # Final totals
-    invoice_paid = Transaction.objects.filter(is_invoice_payment=True, invoice_month=ref_date.month, invoice_year=ref_date.year).exists()
-
-    pending_invoice_amount = 0 if invoice_paid else month_invoice_total
-    total_remaining_to_pay = total_pending_bank + pending_invoice_amount
+    total_remaining_to_pay = total_pending_bank + invoice_pending_total
 
     income_still_expected = forecast_total_income - month_actual_income
     if income_still_expected < 0:
@@ -283,8 +313,11 @@ def dashboard(request):
         'fixed_items_total_count': fixed_items_total_count,
         'total_remaining_to_pay': total_remaining_to_pay,
         'invoice_total': month_invoice_total,
-        'invoice_line_items': invoice_line_items,
-        'invoice_paid': invoice_paid,
+        'invoice_pending_total': invoice_pending_total,
+        'cards_invoice': cards_invoice,
+        'cards_paid_count': cards_paid_count,
+        'cards_total_count': cards_total_count,
+        'invoice_paid': all_invoices_paid,
         'next_invoice_total': next_invoice_total,
         'total_invested': SavingsBox.objects.aggregate(Sum('current_balance'))['current_balance__sum'] or 0,
         'categories': Category.objects.all(),
