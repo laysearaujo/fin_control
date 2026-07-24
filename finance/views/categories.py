@@ -47,11 +47,13 @@ def manage_categories(request):
     # --- PER-CATEGORY BREAKDOWN (filtered by the selected month) ---
     categories_with_details = []
     for category in categories:
-        # Sums what was already spent in this category for the selected month/year
+        # Sums what was already spent in this category for the selected month/year.
+        # Includes savings-box withdrawals (is_internal_transfer=True): that money was
+        # genuinely spent on something real, it just came from a caixinha instead of the
+        # checking account, so it still counts as real spend for budgeting purposes.
         debit_spend = Transaction.objects.filter(
             category=category,
             is_credit_card=False,
-            is_internal_transfer=False,
             purchase_date__month=ref_date.month,
             purchase_date__year=ref_date.year
         ).aggregate(Sum('total_amount'))['total_amount__sum'] or 0

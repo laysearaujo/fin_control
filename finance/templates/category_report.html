@@ -19,12 +19,43 @@
         </div>
     </div>
 
+    <!-- CARD RESUMO DO PLANEJAMENTO (clique para abrir o Planejamento completo) -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <a href="{% url 'gerenciar_categorias' %}?mes={{ mes }}&ano={{ ano }}" class="text-decoration-none">
+                <div class="card border-0 shadow-sm rounded-4 p-4 bg-white planejamento-card">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                        <div>
+                            <h5 class="fw-bold text-dark m-0">📂 Planejamento do Mês</h5>
+                            <small class="text-muted">Gasto real vs. teto orçado por categoria</small>
+                        </div>
+                        <div class="d-flex gap-4 text-center">
+                            <div>
+                                <small class="text-muted d-block text-uppercase" style="font-size: 0.7rem;">Teto Orçado</small>
+                                <span class="fw-bold text-dark">R$ {{ total_planned|floatformat:2 }}</span>
+                            </div>
+                            <div>
+                                <small class="text-muted d-block text-uppercase" style="font-size: 0.7rem;">Gasto</small>
+                                <span class="fw-bold text-danger">R$ {{ total_planned_spent|floatformat:2 }}</span>
+                            </div>
+                            <div>
+                                <small class="text-muted d-block text-uppercase" style="font-size: 0.7rem;">Sobra do Orçamento</small>
+                                <span class="fw-bold {% if planned_leftover < 0 %}text-danger{% else %}text-success{% endif %}">R$ {{ planned_leftover|floatformat:2 }}</span>
+                            </div>
+                            <span class="text-muted fs-4 align-self-center">›</span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+
     <!-- HISTÓRICO DE ENTRADAS VS SAÍDAS -->
     <div class="row mb-4">
         <div class="col-12">
             <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
                 <h5 class="fw-bold text-dark mb-1">📊 Saúde Financeira Histórica</h5>
-                <p class="text-muted small mb-3">Sua linha vermelha de custos reais deve andar sempre abaixo da linha verde de entradas.</p>
+                <p class="text-muted small mb-3">Sua linha vermelha de custos reais deve andar sempre abaixo da linha verde (saldo do mês anterior + renda que entrou).</p>
                 <div style="position: relative; height: 260px;">
                     <canvas id="graficoHistorico"></canvas>
                 </div>
@@ -58,10 +89,31 @@
                         <h5 class="fw-bold text-dark m-0">🌱 Alocação de Aportes</h5>
                         <small class="text-muted">Destinação do dinheiro guardado e caixinhas</small>
                     </div>
-                    <span class="badge bg-success fs-6 px-3 rounded-pill">R$ {{ total_deposits|floatformat:2 }}</span>
+                    <div class="text-end">
+                        <span class="badge bg-success fs-6 px-3 rounded-pill d-block">R$ {{ total_deposits|floatformat:2 }}</span>
+                        <span class="badge bg-light text-muted border mt-1" style="font-size: 0.65rem;">{{ deposits_pct_of_income|floatformat:1 }}% da renda</span>
+                    </div>
                 </div>
                 <div style="position: relative; height: 260px;">
                     <canvas id="graficoPizzaAportes"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PATRIMÔNIO GUARDADO NAS CAIXINHAS (LINHA TEMPORAL) -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+                <div class="d-flex justify-content-between align-items-start mb-1">
+                    <div>
+                        <h5 class="fw-bold text-dark m-0">📈 Patrimônio Guardado (Caixinhas)</h5>
+                        <small class="text-muted">Destinação do dinheiro guardado e caixinhas ao longo do tempo — sobe com aportes, desce com resgates</small>
+                    </div>
+                    <span class="badge bg-primary fs-6 px-3 rounded-pill">R$ {{ total_wealth|floatformat:2 }}</span>
+                </div>
+                <div style="position: relative; height: 260px;">
+                    <canvas id="graficoPatrimonio"></canvas>
                 </div>
             </div>
         </div>
@@ -71,47 +123,53 @@
     <div class="row g-4">
         <!-- Semáforo de 3 Meses -->
         <div class="col-lg-8">
-            <div class="card border-0 shadow-sm rounded-4 p-4 bg-white h-100">
-                <h5 class="fw-bold text-dark mb-1">🚥 Semáforo Temporal de Fluxo de Caixa</h5>
-                <p class="text-muted small mb-3">Clique em qualquer linha para navegar diretamente para a análise daquele mês completo.</p>
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0 text-center border-top">
-                        <thead class="table-light">
-                            <tr>
-                                <th class="text-start ps-3 small text-uppercase text-secondary">Período de Análise</th>
-                                <th class="small text-uppercase text-secondary">Entradas</th>
-                                <th class="small text-uppercase text-secondary">Custo Real</th>
-                                <th class="small text-uppercase text-secondary">Aportes</th>
-                                <th class="small text-uppercase text-secondary">Sobra Líquida</th>
-                                <th class="text-end pe-3 small text-uppercase text-secondary">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for row in traffic_light_data %}
-                            <tr onclick="window.location.href='?mes={{ row.mes }}&ano={{ row.ano }}';" style="cursor: pointer;">
-                                <td class="text-start ps-3 fw-bold text-dark">📅 {{ row.label }}</td>
-                                <td class="text-success fw-semibold">R$ {{ row.income|floatformat:2 }}</td>
-                                <td class="text-danger">R$ {{ row.actual_cost|floatformat:2 }}</td>
-                                <td class="text-primary">R$ {{ row.deposits|floatformat:2 }}</td>
-                                <td class="{% if row.leftover < 0 %}text-danger fw-bold{% else %}text-dark{% endif %}">
-                                    R$ {{ row.leftover|floatformat:2 }}
-                                </td>
-                                <td class="text-end pe-3">
-                                    <span class="{{ row.color }}">{{ row.status }}</span>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+            <div class="card border-0 shadow-sm rounded-4 p-4 bg-white h-100 semaforo-card"
+                 onclick="window.location.href='{% url 'relatorio_anual' %}?ano={{ ano }}';" style="cursor: pointer;">
+                <div class="d-flex justify-content-between align-items-start mb-1 flex-wrap gap-2">
+                    <h5 class="fw-bold text-dark m-0">🚥 Semáforo Temporal de Fluxo de Caixa</h5>
+                    <a href="{% url 'analise_anual' %}" onclick="event.stopPropagation();" class="btn btn-sm btn-outline-dark rounded-pill">
+                        🧮 Simular Compra Parcelada
+                    </a>
+                </div>
+                <p class="text-muted small mb-3">Clique num mês pra ver o detalhe, ou em qualquer outro lugar do card pra ver o ano inteiro.</p>
+
+                <div class="row g-3">
+                    {% for row in traffic_light_data %}
+                    <div class="col-md-4">
+                        <div class="p-3 rounded-4 h-100 text-center"
+                             style="background-color: {{ row.bg_color }}; cursor: pointer;"
+                             onclick="event.stopPropagation(); window.location.href='?mes={{ row.mes }}&ano={{ row.ano }}';">
+                            <div class="small fw-bold text-uppercase mb-2" style="color: {{ row.text_color }};">{{ row.label }}</div>
+
+                            <h4 class="fw-bold mb-1" style="color: {{ row.text_color }};">R$ {{ row.leftover|floatformat:2 }}</h4>
+                            <div class="small fw-bold {{ row.color }} mb-3">{{ row.status }}</div>
+
+                            <div class="d-flex justify-content-between small text-secondary px-1">
+                                <span>Entradas</span>
+                                <span class="fw-bold">R$ {{ row.income|floatformat:0 }}</span>
+                            </div>
+                            <div class="d-flex justify-content-between small text-secondary px-1">
+                                <span>Custo Real</span>
+                                <span class="fw-bold">R$ {{ row.actual_cost|floatformat:0 }}</span>
+                            </div>
+                            <div class="d-flex justify-content-between small text-secondary px-1">
+                                <span>Aportes</span>
+                                <span class="fw-bold">R$ {{ row.deposits|floatformat:0 }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
                 </div>
             </div>
         </div>
 
         <!-- Painel de Reserva de Emergência Real -->
         <div class="col-lg-4">
-            <div class="card border-0 shadow-sm rounded-4 p-4 bg-white h-100">
-                <h5 class="fw-bold text-dark mb-3">🛡️ Reserva de Emergência</h5>
-                
+            <div class="card border-0 shadow-sm rounded-4 p-4 bg-white h-100{% if emergency_box_id %} reserva-card{% endif %}"
+                 {% if emergency_box_id %}onclick="window.location.href='{% url 'detalhes_caixinha' emergency_box_id %}';" style="cursor: pointer;"{% endif %}>
+                <h5 class="fw-bold text-dark mb-1">🛡️ Reserva de Emergência</h5>
+                <small class="text-muted d-block mb-3" style="font-size: 0.75rem;">💡 Sugestão baseada no seu histórico</small>
+
                 <div class="mb-3">
                     <small class="text-muted d-block fw-bold text-uppercase" style="font-size: 0.65rem;">Custo Médio de Vida Histórico</small>
                     <h4 class="fw-bold text-dark m-0">R$ {{ average_living_cost|floatformat:2 }}</h4>
@@ -146,8 +204,31 @@
     </div>
 </div>
 
+<style>
+    .planejamento-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+    .semaforo-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+    .semaforo-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.08) !important; }
+    .planejamento-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.08) !important; }
+    .reserva-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+    .reserva-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.08) !important; }
+</style>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+    // Tooltip (só aparece passando o mouse) mostrando valor + porcentagem da fatia
+    function tooltipPizza() {
+        return {
+            callbacks: {
+                label: function(ctx) {
+                    const dados = ctx.chart.data.datasets[0].data;
+                    const total = dados.reduce((soma, v) => soma + v, 0);
+                    const pct = total > 0 ? (ctx.parsed / total * 100) : 0;
+                    return ctx.label + ': R$ ' + ctx.parsed.toLocaleString('pt-BR', {minimumFractionDigits: 2}) + ' (' + pct.toFixed(1) + '%)';
+                }
+            }
+        };
+    }
+
     // Parâmetros recebidos do Django
     const labelsDespesas = {{ labels|safe }};
     const valoresDespesas = {{ data|safe }};
@@ -159,6 +240,8 @@
     const labelsHistorico = {{ history_labels|safe }};
     const entradasHistorico = {{ history_income|safe }};
     const saidasHistorico = {{ history_expenses|safe }};
+    const labelsPatrimonio = {{ wealth_labels|safe }};
+    const patrimonioHistorico = {{ wealth_history|safe }};
 
     const mes = "{{ mes }}";
     const ano = "{{ ano }}";
@@ -173,7 +256,7 @@
             labels: labelsHistorico,
             datasets: [
                 {
-                    label: 'Entradas Reais (Salários)',
+                    label: 'Disponível no Mês (Saldo Anterior + Renda)',
                     data: entradasHistorico,
                     borderColor: '#2ECC71',
                     backgroundColor: 'rgba(46, 204, 113, 0.05)',
@@ -204,6 +287,42 @@
         }
     });
 
+    // 1B. GRÁFICO DE LINHA DO PATRIMÔNIO GUARDADO (CAIXINHAS)
+    new Chart(document.getElementById('graficoPatrimonio').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: labelsPatrimonio,
+            datasets: [
+                {
+                    label: 'Patrimônio em Caixinhas',
+                    data: patrimonioHistorico,
+                    borderColor: '#2C3E50',
+                    backgroundColor: 'rgba(44, 62, 80, 0.08)',
+                    borderWidth: 3,
+                    tension: 0.25,
+                    fill: true,
+                    pointBackgroundColor: '#2C3E50'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    ticks: { callback: function(value) { return 'R$ ' + value.toLocaleString('pt-BR'); } }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) { return 'R$ ' + ctx.parsed.y.toLocaleString('pt-BR', {minimumFractionDigits: 2}); }
+                    }
+                }
+            }
+        }
+    });
+
     // 2. PIZZA CUSTOS DE VIDA REAIS
     new Chart(document.getElementById('graficoPizzaDespesas').getContext('2d'), {
         type: 'doughnut',
@@ -214,7 +333,10 @@
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
+            plugins: {
+                legend: { display: false },
+                tooltip: tooltipPizza()
+            },
             onClick: (evt, activeElements) => {
                 if (activeElements.length > 0) {
                     const idx = activeElements[0].index;
@@ -237,7 +359,10 @@
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false } }
+            plugins: {
+                legend: { display: false },
+                tooltip: tooltipPizza()
+            }
         }
     });
 </script>

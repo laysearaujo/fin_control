@@ -1,19 +1,28 @@
 {% extends 'base.html' %}
 
 {% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <a href="{% url 'relatorio_categorias' %}?ano={{ ano }}" class="btn btn-sm btn-light border rounded-pill px-3">
+        ⬅️ Voltar para Análises
+    </a>
+    <a href="{% url 'analise_anual' %}" class="btn btn-sm btn-outline-dark rounded-pill">
+        🧮 Simular Compra Parcelada
+    </a>
+</div>
+
 <div class="text-center mb-5">
     <h2 class="fw-bold">🗓️ Visão Anual {{ ano }}</h2>
-    <p class="text-muted">Verde: Saldo Positivo | Vermelho: Saldo Negativo</p>
+    <p class="text-muted">Mesmo cálculo do Semáforo em Análises: entradas do mês menos custo real do mês.</p>
 </div>
 
 <div class="row g-4">
     {% for m in grid %}
     <div class="col-6 col-md-4 col-lg-3">
-        <div class="card h-100 shadow-sm text-center p-3 border-0" 
-             style="background-color: {% if m.balance >= 0 %}#d1e7dd{% else %}#f8d7da{% endif %};">
-            
-            <div class="card-body">
-                <h5 class="fw-bold text-uppercase mb-3" style="color: {% if m.balance >= 0 %}#0f5132{% else %}#842029{% endif %};">
+        <div class="card h-100 shadow-sm text-center p-3 border-0"
+             style="background-color: {{ m.bg_color }};">
+
+            <div class="card-body d-flex flex-column">
+                <h5 class="fw-bold text-uppercase mb-3" style="color: {{ m.text_color }};">
                     {{ m.month_num }} - {{ m.month_name }}
                 </h5>
 
@@ -23,11 +32,37 @@
                     <span class="badge bg-primary mb-2">Previsão</span>
                 {% endif %}
 
-                <h3 class="fw-bold mt-2" style="color: {% if m.balance >= 0 %}#0f5132{% else %}#842029{% endif %};">
-                    R$ {{ m.balance|floatformat:0 }}
+                <div class="small fw-bold {{ m.status_color }} mb-2">{{ m.status }}</div>
+
+                <div class="d-flex justify-content-between small text-secondary px-1">
+                    <span>Saldo Anterior</span>
+                    <span class="fw-bold">R$ {{ m.previous_balance|floatformat:0 }}</span>
+                </div>
+                <div class="d-flex justify-content-between small text-secondary px-1">
+                    <span>+ Entradas</span>
+                    <span class="fw-bold">R$ {{ m.income|floatformat:0 }}</span>
+                </div>
+                <div class="d-flex justify-content-between small text-secondary px-1">
+                    <span>− Custo Real</span>
+                    <span class="fw-bold">R$ {{ m.cost|floatformat:0 }}</span>
+                </div>
+                <div class="d-flex justify-content-between small text-secondary px-1{% if not m.resgates %} mb-2{% endif %}">
+                    <span>− Aportes</span>
+                    <span class="fw-bold">R$ {{ m.deposits|floatformat:0 }}</span>
+                </div>
+                {% if m.resgates %}
+                <div class="d-flex justify-content-between small text-muted px-1 mb-2" title="Já contado no Custo Real, mas não sai da sua conta">
+                    <span>(Resgates)</span>
+                    <span class="fw-bold">R$ {{ m.resgates|floatformat:0 }}</span>
+                </div>
+                {% endif %}
+
+                <h3 class="fw-bold mt-1" style="color: {{ m.text_color }};">
+                    R$ {{ m.ending_balance|floatformat:0 }}
                 </h3>
-                
-                <a href="{% url 'dashboard' %}?mes={{ m.month_num }}&ano={{ ano }}" class="btn btn-sm btn-light mt-3 stretched-link opacity-75">
+                <small class="text-muted d-block mb-3">Saldo Final</small>
+
+                <a href="{% url 'dashboard' %}?mes={{ m.month_num }}&ano={{ ano }}" class="btn btn-sm btn-light mt-auto stretched-link opacity-75">
                     Ver Detalhes
                 </a>
             </div>

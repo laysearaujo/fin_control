@@ -36,23 +36,11 @@
                 </li>
 
                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'relatorio_categorias' %}">
-                        📈 Análises
-                    </a>
-                    <!-- <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="{% url 'relatorio_categorias' %}">🍕 Gastos por Categoria</a></li>
-                        <li><a class="dropdown-item" href="{% url 'relatorio_anual' %}">🗓️ Semáforo Anual</a></li>
-                    </ul> -->
+                    <a class="nav-link" href="{% url 'caixinhas' %}">🐖 Caixinhas</a>
                 </li>
 
-                <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle fw-bold" href="#" role="button" data-bs-toggle="dropdown">
-                        🎯 Meu Dinheiro
-                    </a>
-                    <ul class="dropdown-menu">
-                        <li><a class="dropdown-item fw-bold" href="{% url 'gerenciar_categorias' %}">📂 Planejamento (Categorias)</a></li>
-                        <li><a class="dropdown-item fw-bold" href="{% url 'caixinhas' %}">🐖 Minhas Caixinhas</a></li>
-                    </ul>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'relatorio_categorias' %}">📈 Análises</a>
                 </li>
 
                 <li class="nav-item dropdown">
@@ -64,6 +52,7 @@
                         <li><a class="dropdown-item" href="{% url 'gerenciar_receitas_fixas' %}">💰 Salários e Entradas</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item" href="{% url 'gerenciar_cartoes' %}">💳 Cartões de Crédito</a></li>
+                        <li><a class="dropdown-item" href="{% url 'nova_categoria' %}">📂 Nova Categoria</a></li>
                     </ul>
                 </li>
             </ul>
