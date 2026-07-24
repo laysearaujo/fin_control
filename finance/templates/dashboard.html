@@ -134,248 +134,267 @@
     {% endif %}
 </div>
 
-<div class="row g-4">
-    
-    <div class="col-md-6">
+<div class="row g-4 mb-4">
+
+    <div class="col-md-8">
         <div class="card border-0 shadow-sm rounded-4 h-100">
-            <div class="card-header bg-white border-0 pt-4 px-4 d-flex justify-content-between align-items-center">
-                <h5 class="fw-bold m-0">🏠 Contas do Mês</h5>
-                
-                {% if not is_past %}
-                <div class="d-flex gap-2">
+            <div class="card-header bg-white border-0 pt-4 px-4">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="fw-bold m-0">🏠 Contas do Mês</h5>
+
+                    {% if not is_past %}
                     <button type="button" class="btn btn-sm btn-primary rounded-pill fw-bold px-3" data-bs-toggle="modal" data-bs-target="#modalContaAvulsa">
                         + Extra
                     </button>
+                    {% endif %}
+                </div>
+
+                {% if fixed_items_total_count %}
+                <div class="d-flex align-items-center gap-2">
+                    <div class="progress flex-grow-1" style="height: 8px;">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: {% widthratio fixed_items_paid_count fixed_items_total_count 100 %}%;"></div>
                     </div>
+                    <small class="text-muted fw-bold" style="font-size: 0.75rem; white-space: nowrap;">{{ fixed_items_paid_count }}/{{ fixed_items_total_count }} pagas</small>
+                </div>
                 {% endif %}
             </div>
-            
-            <div class="card-body px-4 pb-4">
-                <div class="table-responsive">
-                    <table class="table align-middle table-hover">
-                        <tbody class="border-top-0">
-                            {% for item in fixed_items %}
-                            <tr>
-                                <td class="ps-0 py-3">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <div class="fw-bold text-dark">{{ item.name }}</div>
-                                        
-                                        {% if item.is_credit_card %}
-                                            <span class="badge bg-warning text-dark border border-warning" style="font-size: 0.65em">CARTÃO</span>
-                                        {% endif %}
-                                        {% if item.kind == 'one_off' %}
-                                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary" style="font-size: 0.65em">EXTRA</span>
-                                        {% endif %}
+
+            <div class="card-body px-4 pb-2 pt-2" style="max-height: 240px; overflow-y: auto;">
+                {% for item in fixed_items %}
+                <div class="d-flex justify-content-between align-items-center py-3 {% if not forloop.last %}border-bottom{% endif %}">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="rounded-circle d-flex align-items-center justify-content-center {% if item.status == 'paid' %}bg-success bg-opacity-10{% elif item.is_overdue %}bg-danger bg-opacity-10{% else %}bg-secondary bg-opacity-10{% endif %}" style="width: 40px; height: 40px; font-size: 1.1rem; flex-shrink: 0;">
+                            {% if item.status == 'paid' %}✅{% elif item.is_overdue %}⚠️{% else %}🕐{% endif %}
+                        </span>
+                        <div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="fw-bold text-dark">{{ item.name }}</span>
+                                {% if item.is_credit_card %}
+                                    <span class="badge bg-warning text-dark border border-warning" style="font-size: 0.62em">CARTÃO</span>
+                                {% endif %}
+                                {% if item.kind == 'one_off' %}
+                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary" style="font-size: 0.62em">EXTRA</span>
+                                {% endif %}
+                            </div>
+
+                            {% if item.status == 'paid' %}
+                                <small class="text-success fw-bold" style="font-size: 0.75rem;">Pago{% if item.is_credit_card %} na fatura{% endif %}</small>
+                            {% elif item.is_overdue %}
+                                <small class="text-danger fw-bold" style="font-size: 0.75rem;">Atrasada · venceu dia {{ item.day }}</small>
+                            {% elif is_past %}
+                                <small class="text-danger fw-bold" style="font-size: 0.75rem;">Não paga</small>
+                            {% else %}
+                                <small class="text-muted" style="font-size: 0.75rem;">Vence dia <strong>{{ item.day }}</strong></small>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-3">
+                    {% if item.status == 'paid' %}
+                        <span class="fw-bold text-success valor-sensivel">R$ {{ item.paid_amount }}</span>
+                    {% elif is_past %}
+                        <span class="fw-bold text-danger valor-sensivel">R$ {{ item.expected_amount }}</span>
+                    {% else %}
+                        <span class="fw-bold {% if item.is_overdue %}text-danger{% else %}text-dark{% endif %} valor-sensivel">R$ {{ item.expected_amount }}</span>
+
+                        {% if item.kind == 'one_off' %}
+                            <a href="{% url 'pagar_conta_avulsa' item.id %}?mes={{ ref_date.month }}&ano={{ ref_date.year }}" class="btn btn-sm btn-success rounded-pill fw-bold px-3 shadow-sm" style="min-width: 80px;">Pagar</a>
+                        {% else %}
+                            <a href="{% url 'pagar_gasto_fixo' item.id %}?mes={{ ref_date.month }}&ano={{ ref_date.year }}" class="btn btn-sm btn-success rounded-pill fw-bold px-3 shadow-sm" style="min-width: 80px;">Pagar</a>
+                        {% endif %}
+
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-light rounded-circle border-0 text-muted d-flex align-items-center justify-content-center" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="width: 32px; height: 32px;">
+                                ⋮
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end border-0 shadow rounded-3 p-2">
+                                <li>
+                                    <button type="button" class="dropdown-item rounded-2 small d-flex align-items-center gap-2 py-2"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#modalEditar{% if item.kind == 'one_off' %}{{ item.id }}{% else %}Fixo{{ item.id }}{% endif %}">
+                                        <span>✏️</span> Editar
+                                    </button>
+                                </li>
+                                <li>
+                                    {% if item.kind == 'one_off' %}
+                                        <a class="dropdown-item rounded-2 small text-danger d-flex align-items-center gap-2 py-2"
+                                           href="{% url 'apagar_conta_avulsa' item.id %}"
+                                           onclick="return confirm('Tem certeza que quer apagar essa conta extra?')">
+                                            <span>🗑️</span> Excluir
+                                        </a>
+                                    {% else %}
+                                        <a class="dropdown-item rounded-2 small text-danger d-flex align-items-center gap-2 py-2"
+                                           href="{% url 'excluir_gasto_fixo' item.id %}"
+                                           onclick="return confirm('ATENÇÃO: Isso vai apagar essa Conta Fixa para TODOS os meses. Continuar?')">
+                                            <span>🗑️</span> Excluir (Recorrente)
+                                        </a>
+                                    {% endif %}
+                                </li>
+                            </ul>
+                        </div>
+
+                        {% if item.kind == 'one_off' %}
+                            <div class="modal fade text-start" id="modalEditar{{ item.id }}" tabindex="-1">
+                                <div class="modal-dialog modal-dialog-centered">
+                                    <div class="modal-content border-0 shadow">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title fw-bold">Editar Conta Extra</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <form action="{% url 'editar_conta_avulsa' item.id %}" method="POST">
+                                            {% csrf_token %}
+                                            <div class="modal-body">
+                                                <div class="mb-3">
+                                                    <label class="form-label text-muted small fw-bold">NOME</label>
+                                                    <input type="text" name="titulo" class="form-control" value="{{ item.name }}" required>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label text-muted small fw-bold">VALOR (R$)</label>
+                                                    <input type="number" step="0.01" name="valor" class="form-control" value="{{ item.expected_amount|stringformat:'.2f' }}" required>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label text-muted small fw-bold">VENCIMENTO</label>
+                                                    <input type="date" name="data_vencimento" class="form-control" value="{{ ref_date.year }}-{{ ref_date.month|stringformat:'02d' }}-{{ item.day|stringformat:'02d' }}" required>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label text-muted small fw-bold">CATEGORIA</label>
+                                                    <select name="categoria_id" class="form-select">
+                                                        {% for cat in categories %}
+                                                            <option value="{{ cat.id }}">{{ cat.name }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer bg-light">
+                                                <button type="submit" class="btn btn-primary rounded-pill px-4">Salvar</button>
+                                            </div>
+                                        </form>
                                     </div>
-                                    
-                                    {% if item.status == 'paid' %}
-                                        <small class="text-success fw-bold" style="font-size: 0.75rem;">Pago em dia!</small>
-                                    {% else %}
-                                        {% if is_past %}
-                                            <small class="text-danger fw-bold" style="font-size: 0.75rem;">Não pago</small>
-                                        {% else %}
-                                            <small class="text-muted" style="font-size: 0.75rem;">Vence dia <strong>{{ item.day }}</strong></small>
-                                        {% endif %}
-                                    {% endif %}
-                                </td>
-                                
-                                <td class="text-end pe-0 py-3">
-                                    {% if item.status == 'paid' %}
-                                        <div class="text-success fw-bold valor-sensivel">R$ {{ item.paid_amount }} ✅</div>
-                                    {% else %}
-                                        
-                                        {% if is_past %}
-                                            <span class="text-danger fw-bold valor-sensivel"> R$ {{ item.expected_amount }} </span>
-                                        {% else %}
-                                            
-                                            {% if item.is_credit_card %}
-                                                <div class="d-flex flex-column align-items-end">
-                                                    <span class="fw-bold text-muted valor-sensivel">R$ {{ item.expected_amount }}</span>
-                                                    <span class="badge bg-light text-secondary border mt-1">Fatura</span>
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="modal fade text-start" id="modalEditarFixo{{ item.id }}" tabindex="-1">
+                                <div class="modal-dialog modal-dialog-centered">
+                                    <div class="modal-content border-0 shadow">
+                                        <div class="modal-header bg-light">
+                                            <h5 class="modal-title fw-bold">Editar Recorrente</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <form action="{% url 'editar_gasto_fixo' item.id %}" method="POST">
+                                            {% csrf_token %}
+                                            <div class="modal-body">
+                                                <div class="alert alert-warning small py-2 mb-3">
+                                                    ⚠️ Alterar aqui muda a regra para <strong>todos</strong> os meses.
                                                 </div>
-                                            {% else %}
-                                                
-                                                <div class="d-flex align-items-center justify-content-end gap-3">
-                                                    <div class="fw-bold text-dark valor-sensivel">R$ {{ item.expected_amount }}</div>
-
-                                                    {% if item.kind == 'one_off' %}
-                                                        <a href="{% url 'pagar_conta_avulsa' item.id %}?mes={{ ref_date.month }}&ano={{ ref_date.year }}" 
-                                                           class="btn btn-sm btn-success rounded-pill fw-bold px-3 shadow-sm" 
-                                                           style="min-width: 80px;">
-                                                           Pagar
-                                                        </a>
-                                                    {% else %}
-                                                        <a href="{% url 'pagar_gasto_fixo' item.id %}?mes={{ ref_date.month }}&ano={{ ref_date.year }}" 
-                                                           class="btn btn-sm btn-success rounded-pill fw-bold px-3 shadow-sm" 
-                                                           style="min-width: 80px;">
-                                                           Pagar
-                                                        </a>
-                                                    {% endif %}
-
-                                                    <div class="dropdown">
-                                                        <button class="btn btn-sm btn-light rounded-circle border-0 text-muted d-flex align-items-center justify-content-center" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="width: 32px; height: 32px;">
-                                                            ⋮
-                                                        </button>
-                                                        <ul class="dropdown-menu dropdown-menu-end border-0 shadow rounded-3 p-2">
-                                                            <li>
-                                                                <button type="button" class="dropdown-item rounded-2 small d-flex align-items-center gap-2 py-2" 
-                                                                        data-bs-toggle="modal" 
-                                                                        data-bs-target="#modalEditar{% if item.kind == 'one_off' %}{{ item.id }}{% else %}Fixo{{ item.id }}{% endif %}">
-                                                                    <span>✏️</span> Editar
-                                                                </button>
-                                                            </li>
-                                                            <li>
-                                                                {% if item.kind == 'one_off' %}
-                                                                    <a class="dropdown-item rounded-2 small text-danger d-flex align-items-center gap-2 py-2" 
-                                                                       href="{% url 'apagar_conta_avulsa' item.id %}"
-                                                                       onclick="return confirm('Tem certeza que quer apagar essa conta extra?')">
-                                                                        <span>🗑️</span> Excluir
-                                                                    </a>
-                                                                {% else %}
-                                                                    <a class="dropdown-item rounded-2 small text-danger d-flex align-items-center gap-2 py-2" 
-                                                                       href="{% url 'excluir_gasto_fixo' item.id %}"
-                                                                       onclick="return confirm('ATENÇÃO: Isso vai apagar essa Conta Fixa para TODOS os meses. Continuar?')">
-                                                                        <span>🗑️</span> Excluir (Recorrente)
-                                                                    </a>
-                                                                {% endif %}
-                                                            </li>
-                                                        </ul>
+                                                <div class="mb-3">
+                                                    <label class="form-label text-muted small fw-bold">NOME</label>
+                                                    <input type="text" name="nome" class="form-control" value="{{ item.name }}" required>
+                                                </div>
+                                                <div class="row">
+                                                    <div class="col-6 mb-3">
+                                                        <label class="form-label text-muted small fw-bold">VALOR (R$)</label>
+                                                        <input type="number" step="0.01" name="valor" class="form-control" value="{{ item.expected_amount|stringformat:'.2f' }}" required>
                                                     </div>
-
-                                                    {% if item.kind == 'one_off' %}
-                                                        <div class="modal fade text-start" id="modalEditar{{ item.id }}" tabindex="-1">
-                                                            <div class="modal-dialog modal-dialog-centered">
-                                                                <div class="modal-content border-0 shadow">
-                                                                    <div class="modal-header">
-                                                                        <h5 class="modal-title fw-bold">Editar Conta Extra</h5>
-                                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                                    </div>
-                                                                    <form action="{% url 'editar_conta_avulsa' item.id %}" method="POST">
-                                                                        {% csrf_token %}
-                                                                        <div class="modal-body">
-                                                                            <div class="mb-3">
-                                                                                <label class="form-label text-muted small fw-bold">NOME</label>
-                                                                                <input type="text" name="titulo" class="form-control" value="{{ item.name }}" required>
-                                                                            </div>
-                                                                            <div class="mb-3">
-                                                                                <label class="form-label text-muted small fw-bold">VALOR (R$)</label>
-                                                                                <input type="number" step="0.01" name="valor" class="form-control" value="{{ item.expected_amount|stringformat:'.2f' }}" required>
-                                                                            </div>
-                                                                            <div class="mb-3">
-                                                                                <label class="form-label text-muted small fw-bold">VENCIMENTO</label>
-                                                                                <input type="date" name="data_vencimento" class="form-control" value="{{ ref_date.year }}-{{ ref_date.month|stringformat:'02d' }}-{{ item.day|stringformat:'02d' }}" required>
-                                                                            </div>
-                                                                            <div class="mb-3">
-                                                                                <label class="form-label text-muted small fw-bold">CATEGORIA</label>
-                                                                                <select name="categoria_id" class="form-select">
-                                                                                    {% for cat in categories %}
-                                                                                        <option value="{{ cat.id }}">{{ cat.name }}</option>
-                                                                                    {% endfor %}
-                                                                                </select>
-                                                                            </div>
-                                                                        </div>
-                                                                        <div class="modal-footer bg-light">
-                                                                            <button type="submit" class="btn btn-primary rounded-pill px-4">Salvar</button>
-                                                                        </div>
-                                                                    </form>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    {% else %}
-                                                        <div class="modal fade text-start" id="modalEditarFixo{{ item.id }}" tabindex="-1">
-                                                            <div class="modal-dialog modal-dialog-centered">
-                                                                <div class="modal-content border-0 shadow">
-                                                                    <div class="modal-header bg-light">
-                                                                        <h5 class="modal-title fw-bold">Editar Recorrente</h5>
-                                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                                    </div>
-                                                                    <form action="{% url 'editar_gasto_fixo' item.id %}" method="POST">
-                                                                        {% csrf_token %}
-                                                                        <div class="modal-body">
-                                                                            <div class="alert alert-warning small py-2 mb-3">
-                                                                                ⚠️ Alterar aqui muda a regra para <strong>todos</strong> os meses.
-                                                                            </div>
-                                                                            <div class="mb-3">
-                                                                                <label class="form-label text-muted small fw-bold">NOME</label>
-                                                                                <input type="text" name="nome" class="form-control" value="{{ item.name }}" required>
-                                                                            </div>
-                                                                            <div class="row">
-                                                                                <div class="col-6 mb-3">
-                                                                                    <label class="form-label text-muted small fw-bold">VALOR (R$)</label>
-                                                                                    <input type="number" step="0.01" name="valor" class="form-control" value="{{ item.expected_amount|stringformat:'.2f' }}" required>
-                                                                                </div>
-                                                                                <div class="col-6 mb-3">
-                                                                                    <label class="form-label text-muted small fw-bold">DIA VENC.</label>
-                                                                                    <input type="number" min="1" max="31" name="dia_vencimento" class="form-control" value="{{ item.day }}" required>
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                        <div class="modal-footer bg-light">
-                                                                            <button type="submit" class="btn btn-primary rounded-pill px-4">Salvar Regra</button>
-                                                                        </div>
-                                                                    </form>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    {% endif %}
+                                                    <div class="col-6 mb-3">
+                                                        <label class="form-label text-muted small fw-bold">DIA VENC.</label>
+                                                        <input type="number" min="1" max="31" name="dia_vencimento" class="form-control" value="{{ item.day }}" required>
+                                                    </div>
                                                 </div>
-
-                                            {% endif %}
-                                        {% endif %}
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% empty %}
-                            <tr><td colspan="2" class="text-muted text-center py-5">Nenhuma conta cadastrada para este mês.</td></tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                                            </div>
+                                            <div class="modal-footer bg-light">
+                                                <button type="submit" class="btn btn-primary rounded-pill px-4">Salvar Regra</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endif %}
+                    {% endif %}
+                    </div>
                 </div>
+                {% empty %}
+                <p class="text-muted text-center py-5 mb-0">Nenhuma conta cadastrada para este mês.</p>
+                {% endfor %}
             </div>
         </div>
     </div>
 
-    <div class="col-md-6">
+    <div class="col-md-4">
         <div class="card border-0 shadow-sm rounded-4 h-100">
-            <div class="card-body p-4 d-flex flex-column">
-                
-                <div class="d-flex justify-content-between align-items-start mb-4">
-                    <div>
-                        <h5 class="fw-bold mb-1">💳 Fatura do Cartão</h5>
-                        <p class="text-muted small m-0">Vencimento em <strong>{{ ref_date|date:"F" }}</strong></p>
-                    </div>
-                    <button type="button" class="btn btn-sm btn-outline-dark rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#modalFatura">
-                        Ver Detalhes
-                    </button>
+            <div class="card-header bg-white border-0 pt-4 px-4 d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="fw-bold m-0">💳 Fatura do Cartão</h6>
+                    <small class="text-muted" style="font-size: 0.7rem;">Vence em {{ ref_date|date:"F" }}</small>
                 </div>
-                
-                <div class="flex-grow-1 d-flex flex-column justify-content-center">
-                    {% if invoice_paid %}
-                        <div class="text-center py-3">
-                            <div class="mb-2" style="font-size: 3rem;">✅</div>
-                            <h3 class="fw-bold text-success mb-1">Fatura Paga!</h3>
-                            <p class="text-muted">Total quitado: <strong class="valor-sensivel">R$ {{ invoice_total|floatformat:2 }}</strong></p>
-                        </div>
+                <button type="button" class="btn btn-sm btn-outline-dark rounded-pill" data-bs-toggle="modal" data-bs-target="#modalFatura">
+                    Detalhes
+                </button>
+            </div>
 
-                    {% else %}
-                        <div class="text-center py-3">
-                            <small class="text-muted text-uppercase fw-bold">Total da Fatura</small>
-                            <h1 class="fw-bold text-dark valor-sensivel display-5 my-2">R$ {{ invoice_total|floatformat:2 }}</h1>
-                            
-                            {% if not is_past and invoice_total > 0 %}
-                                <button type="button" class="btn btn-dark w-100 rounded-pill py-3 mt-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#modalConfirmarPgto">
-                                   Pagar Fatura Agora
-                                </button>
-                            {% endif %}
-                        </div>
-                    {% endif %}
+            <div class="card-body px-4 pb-4 pt-2 d-flex flex-column">
+                {% if invoice_paid %}
+                    <div class="text-center py-2">
+                        <span class="badge bg-success bg-opacity-10 text-success mb-2">✅ Fatura paga</span>
+                        <h4 class="fw-bold text-success mb-0 valor-sensivel">R$ {{ invoice_total|floatformat:2 }}</h4>
+                        <small class="text-muted">Foi o que você pagou</small>
+                    </div>
+                {% else %}
+                    <div class="text-center py-2">
+                        <small class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">Total da Fatura</small>
+                        <h3 class="fw-bold text-dark valor-sensivel my-1">R$ {{ invoice_total|floatformat:2 }}</h3>
+
+                        {% if not is_past and invoice_total > 0 %}
+                            <button type="button" class="btn btn-dark btn-sm w-100 rounded-pill py-2 mt-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#modalConfirmarPgto">
+                               Pagar Fatura Agora
+                            </button>
+                        {% endif %}
+                    </div>
+                {% endif %}
+
+                <div class="mt-3 pt-3 border-top text-center">
+                    <small class="text-muted d-block" style="font-size: 0.72rem;">🔮 Já acumulado pro próximo mês</small>
+                    <span class="fw-bold text-primary valor-sensivel">R$ {{ next_invoice_total|floatformat:2 }}</span>
                 </div>
 
                 {% if not invoice_paid %}
-                    <div class="mt-4 text-center">
-                        <a href="{% url 'gerenciar_cartoes' %}" class="text-secondary small text-decoration-none">Gerenciar meus cartões</a>
+                    <div class="mt-3 text-center">
+                        <a href="{% url 'gerenciar_cartoes' %}" class="text-secondary small text-decoration-none" style="font-size: 0.75rem;">Gerenciar meus cartões</a>
                     </div>
                 {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+
+    <div class="col-12">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-header bg-white border-0 pt-4 px-4 d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold m-0">🕒 Últimas Movimentações</h5>
+                <a href="{% url 'extrato' %}" class="btn btn-sm btn-outline-secondary rounded-pill">Ver Extrato Completo</a>
+            </div>
+            <div class="card-body px-4 pb-3 pt-1">
+                {% for item in recent_movements %}
+                <div class="d-flex justify-content-between align-items-center py-2 {% if not forloop.last %}border-bottom{% endif %}">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="rounded-circle d-flex align-items-center justify-content-center {% if item.kind == 'income' %}bg-success bg-opacity-10{% else %}bg-danger bg-opacity-10{% endif %}" style="width: 36px; height: 36px; font-size: 1rem; flex-shrink: 0;">
+                            {% if item.kind == 'income' %}⬆️{% else %}⬇️{% endif %}
+                        </span>
+                        <div>
+                            <div class="fw-bold text-dark small">{{ item.description }}</div>
+                            <div class="text-muted" style="font-size: 0.75rem;">
+                                {{ item.date|date:"d/m/Y" }}{% if item.is_credit_card %} · 💳 Cartão{% endif %}{% if item.is_internal_transfer %} · 🐖 Caixinha{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <span class="fw-bold valor-sensivel {% if item.kind == 'income' %}text-success{% else %}text-danger{% endif %}">
+                        {% if item.kind == 'income' %}+{% else %}-{% endif %} R$ {{ item.amount|floatformat:2 }}
+                    </span>
+                </div>
+                {% empty %}
+                <p class="text-muted text-center py-4 mb-0">Nenhuma movimentação registrada ainda.</p>
+                {% endfor %}
             </div>
         </div>
     </div>

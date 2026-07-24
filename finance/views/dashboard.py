@@ -138,6 +138,17 @@ def dashboard(request):
 
     month_invoice_total = installments_total + subscriptions_total
 
+    # What's already accumulating for NEXT month's invoice (installments already scheduled +
+    # subscriptions not yet posted), so purchases made today don't sneak up unnoticed
+    next_invoice_month = ref_date + relativedelta(months=1)
+    next_installments_total = Installment.objects.filter(due_date__month=next_invoice_month.month, due_date__year=next_invoice_month.year).aggregate(Sum('amount'))['amount__sum'] or 0
+    next_subscriptions_total = 0
+    for expense in credit_card_fixed_expenses:
+        already_posted_next = Transaction.objects.filter(fixed_expense=expense, purchase_date__month=next_invoice_month.month, purchase_date__year=next_invoice_month.year).exists()
+        if not already_posted_next:
+            next_subscriptions_total += expense.expected_amount
+    next_invoice_total = next_installments_total + next_subscriptions_total
+
     # The base forecast is just your fixed salary
     total_fixed_income = FixedIncome.objects.aggregate(Sum('amount'))['amount__sum'] or 0
     forecast_total_income = total_fixed_income
@@ -168,16 +179,25 @@ def dashboard(request):
 
     # A. Fixed expenses
     for expense in FixedExpense.objects.all():
-        payment = Transaction.objects.filter(fixed_expense=expense, purchase_date__month=ref_date.month, purchase_date__year=ref_date.year).first()
-        status = 'paid' if payment else 'pending'
-        amount_paid = payment.total_amount if payment else 0
-        if status == 'pending' and not expense.is_credit_card:
-            total_pending_bank += expense.expected_amount
+        if expense.is_credit_card:
+            # Credit card subscriptions are settled in a lump sum when the invoice is paid,
+            # never individually - so as far as the "to-do list" goes, they're already handled
+            status = 'paid'
+            amount_paid = expense.expected_amount
+        else:
+            payment = Transaction.objects.filter(fixed_expense=expense, purchase_date__month=ref_date.month, purchase_date__year=ref_date.year).first()
+            status = 'paid' if payment else 'pending'
+            amount_paid = payment.total_amount if payment else 0
+            if status == 'pending':
+                total_pending_bank += expense.expected_amount
+
+        is_overdue = is_current and status == 'pending' and today.day > expense.due_day
 
         fixed_items_status.append({
             'id': expense.id, 'name': expense.name, 'status': status,
             'expected_amount': expense.expected_amount, 'paid_amount': amount_paid,
-            'day': expense.due_day, 'is_credit_card': expense.is_credit_card, 'kind': 'fixed'
+            'day': expense.due_day, 'is_credit_card': expense.is_credit_card, 'kind': 'fixed',
+            'is_overdue': is_overdue,
         })
 
     # B. One-off bills (only this month's)
@@ -189,11 +209,23 @@ def dashboard(request):
         if status == 'pending':
             total_pending_bank += bill.amount
 
+        is_overdue = is_current and status == 'pending' and today.day > bill.due_date.day
+
         fixed_items_status.append({
             'id': bill.id, 'name': bill.title, 'status': status,
             'expected_amount': bill.amount, 'paid_amount': bill.amount if status == 'paid' else 0,
-            'day': bill.due_date.day, 'is_credit_card': False, 'kind': 'one_off'
+            'day': bill.due_date.day, 'is_credit_card': False, 'kind': 'one_off',
+            'is_overdue': is_overdue,
         })
+
+    # Pending items float to the top (overdue first), so what needs attention is seen first
+    fixed_items_status.sort(key=lambda item: (
+        item['status'] == 'paid',
+        not item['is_overdue'],
+        item['day'],
+    ))
+    fixed_items_paid_count = sum(1 for item in fixed_items_status if item['status'] == 'paid')
+    fixed_items_total_count = len(fixed_items_status)
 
     # Final totals
     invoice_paid = Transaction.objects.filter(is_invoice_payment=True, invoice_month=ref_date.month, invoice_year=ref_date.year).exists()
@@ -208,8 +240,34 @@ def dashboard(request):
     projected_balance = current_real_balance + income_still_expected - total_remaining_to_pay
     forecast_total_expenses = month_actual_expenses + total_remaining_to_pay
 
+    # Last 5 movements (income + expenses combined), so you can glance at the dashboard and
+    # immediately see what just happened, without having to open the full statement
+    recent_income = Income.objects.order_by('-date', '-id')[:5]
+    recent_expenses = Transaction.objects.order_by('-purchase_date', '-id')[:5]
+
+    recent_movements = []
+    for income in recent_income:
+        recent_movements.append({
+            'date': income.date,
+            'description': income.description,
+            'amount': income.amount,
+            'kind': 'income',
+        })
+    for expense in recent_expenses:
+        recent_movements.append({
+            'date': expense.purchase_date,
+            'description': expense.description,
+            'amount': expense.total_amount,
+            'kind': 'expense',
+            'is_credit_card': expense.is_credit_card,
+            'is_internal_transfer': expense.is_internal_transfer,
+        })
+    recent_movements.sort(key=lambda m: m['date'], reverse=True)
+    recent_movements = recent_movements[:5]
+
     context = {
         'ref_date': ref_date,
+        'recent_movements': recent_movements,
         'is_past': is_past, 'is_future': is_future, 'is_current': is_current,
         'prev_month_url': f"?mes={previous_month.month}&ano={previous_month.year}",
         'next_month_url': f"?mes={next_month.month}&ano={next_month.year}",
@@ -221,10 +279,13 @@ def dashboard(request):
         'month_actual_income': month_actual_income,
         'month_actual_expenses': month_actual_expenses,
         'fixed_items': fixed_items_status,
+        'fixed_items_paid_count': fixed_items_paid_count,
+        'fixed_items_total_count': fixed_items_total_count,
         'total_remaining_to_pay': total_remaining_to_pay,
         'invoice_total': month_invoice_total,
         'invoice_line_items': invoice_line_items,
         'invoice_paid': invoice_paid,
+        'next_invoice_total': next_invoice_total,
         'total_invested': SavingsBox.objects.aggregate(Sum('current_balance'))['current_balance__sum'] or 0,
         'categories': Category.objects.all(),
     }

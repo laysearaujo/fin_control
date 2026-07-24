@@ -1,4 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
 from django.db import transaction
 from django.utils import timezone
 from datetime import datetime
@@ -28,6 +29,7 @@ def new_transaction(request):
                         box.current_balance += new_transaction_obj.total_amount
                         box.save()
 
+                messages.success(request, f"Despesa \"{new_transaction_obj.description}\" de R$ {new_transaction_obj.total_amount:.2f} adicionada!")
                 return redirect('dashboard')
             except Exception as e:
                 # If something goes wrong, don't crash the app, just log it
@@ -67,6 +69,7 @@ def new_income(request):
         # it was received without matching on the description text
         income.fixed_income = fixed_income
         income.save()
+        messages.success(request, f"Receita \"{income.description}\" de R$ {income.amount:.2f} adicionada!")
         return redirect('dashboard')
 
     return render(request, 'generic_form.html', {'form': form, 'title': '💰 Registrar Entrada'})
