@@ -97,6 +97,13 @@ class SavingsBoxForm(BootstrapModelForm):
             'is_emergency_reserve': forms.CheckboxInput(attrs={'role': 'switch'}),
         }
 
+
+class SavingsBoxEditForm(SavingsBoxForm):
+    """Same as SavingsBoxForm, minus current_balance - editing settings shouldn't silently
+    change the balance without logging it as yield, that only happens via 'Atualizar valor hoje'"""
+    class Meta(SavingsBoxForm.Meta):
+        fields = ['name', 'description', 'cdi_target_pct', 'target_amount', 'is_emergency_reserve']
+
 class SelfLoanForm(BootstrapModelForm):
     class Meta:
         model = SelfLoan

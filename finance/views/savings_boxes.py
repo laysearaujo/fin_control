@@ -1,12 +1,35 @@
+import math
+from datetime import timedelta
+
+from dateutil.relativedelta import relativedelta
 from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Sum, Q
 from django.utils import timezone
 from django.contrib import messages
-from dateutil.relativedelta import relativedelta
 from decimal import Decimal
 
-from ..models import SavingsBox, Category, Transaction, Income, FixedExpense, SelfLoan
-from ..forms import SavingsBoxForm, SelfLoanForm
+from ..models import SavingsBox, SavingsBoxYieldEvent, Category, Transaction, Income, FixedExpense, SelfLoan
+from ..forms import SavingsBoxForm, SavingsBoxEditForm, SelfLoanForm
+
+
+def _compute_windowed_yield(box, today):
+    """How much a box has really yielded in the last 30 days, and in the last 12 months
+    (or since it was created, if it's younger than that) - based on logged yield events,
+    not a speculative CDI projection"""
+    thirty_days_ago = today - timedelta(days=30)
+    yield_30_days = SavingsBoxYieldEvent.objects.filter(box=box, date__gte=thirty_days_ago).aggregate(Sum('amount'))['amount__sum'] or 0
+
+    created_date = box.created_at.date()
+    one_year_ago = today - timedelta(days=365)
+    is_younger_than_12_months = created_date > one_year_ago
+    window_start = max(created_date, one_year_ago)
+    yield_12_months = SavingsBoxYieldEvent.objects.filter(box=box, date__gte=window_start).aggregate(Sum('amount'))['amount__sum'] or 0
+
+    return {
+        'yield_30_days': yield_30_days,
+        'yield_12_months': yield_12_months,
+        'is_younger_than_12_months': is_younger_than_12_months,
+    }
 
 
 def savings_boxes(request):
@@ -16,11 +39,29 @@ def savings_boxes(request):
     # Handles balance adjustment (mark-to-market)
     if request.method == 'POST' and 'atualizar_saldo' in request.POST:
         box_id = request.POST.get('caixinha_id')
-        new_value = request.POST.get('novo_valor')
         box = SavingsBox.objects.get(id=box_id)
+
+        try:
+            new_value = Decimal(request.POST.get('novo_valor', '').replace(',', '.'))
+        except (ValueError, TypeError):
+            return redirect('caixinhas')
+
+        # The whole delta from a manual sync is yield - deposits/withdrawals already move
+        # current_balance through their own dedicated flows, never through this one
+        delta = new_value - box.current_balance
+        if delta != 0:
+            SavingsBoxYieldEvent.objects.create(box=box, date=timezone.now().date(), amount=delta)
+
         box.current_balance = new_value
         box.save()
         return redirect('caixinhas')
+
+    today = timezone.now().date()
+    for box in box_list:
+        windowed = _compute_windowed_yield(box, today)
+        box.yield_30_days = windowed['yield_30_days']
+        box.yield_12_months = windowed['yield_12_months']
+        box.is_younger_than_12_months = windowed['is_younger_than_12_months']
 
     return render(request, 'savings_boxes.html', {'boxes': box_list, 'total': total_saved})
 
@@ -34,10 +75,11 @@ def new_savings_box(request):
 
 
 def edit_savings_box(request, id):
-    """Allows changing a savings box's settings and goals"""
+    """Allows changing a savings box's settings and goals (not its balance - that's
+    handled separately by 'Atualizar valor hoje', which logs the change as yield)"""
     box = get_object_or_404(SavingsBox, id=id)
     # instance=box pre-fills the generic form with the existing data
-    form = SavingsBoxForm(request.POST or None, instance=box)
+    form = SavingsBoxEditForm(request.POST or None, instance=box)
 
     if form.is_valid():
         form.save()
@@ -64,6 +106,8 @@ def savings_box_detail(request, id):
         Q(target_savings_box=box) | Q(source_savings_box=box)
     ).order_by('-purchase_date')
 
+    today = timezone.now().date()
+
     # 2. Goal logic
     amount_left_for_goal = 0
     goal_percentage = 0
@@ -71,40 +115,67 @@ def savings_box_detail(request, id):
         amount_left_for_goal = max(0, box.target_amount - box.current_balance)
         goal_percentage = min(100, int((box.current_balance / box.target_amount) * 100))
 
-    # 3. Future earnings projection (compound interest based on the CDI rate)
-    # Approximate monthly CDI rate (0.85%) adjusted by the box's %
-    monthly_rate = Decimal(0.0085) * (box.cdi_target_pct / 100)
+    # How many whole months this box has been growing for, used both for the goal
+    # forecast and to turn its average growth into a rate
+    created_date = box.created_at.date()
+    months_tracked = max(1, (today.year - created_date.year) * 12 + (today.month - created_date.month))
+    avg_monthly_growth = (box.current_balance - box.initial_balance) / months_tracked
 
-    projections = []
-    target_months = [1, 3, 6, 12]
-    for m in target_months:
-        projected_balance = box.current_balance * ((1 + monthly_rate) ** m)
-        estimated_profit = projected_balance - box.current_balance
-        projections.append({
-            'months': m,
-            'total': projected_balance,
-            'profit': estimated_profit
-        })
+    # Projects when the goal will be hit based on the box's real average growth pace
+    # (aportes - resgates + rendimento) - not a speculative interest rate
+    goal_forecast_date = None
+    goal_forecast_months = None
+    if box.target_amount and amount_left_for_goal > 0 and avg_monthly_growth > 0:
+        months_needed = amount_left_for_goal / avg_monthly_growth
+        goal_forecast_months = math.ceil(float(months_needed))
+        goal_forecast_date = today + relativedelta(months=goal_forecast_months)
 
-    # 4. Data for the month-by-month growth chart (historical/future simulation)
-    # Generates a line showing the growth trend for the next 6 months
-    chart_labels = []
-    chart_data = []
-    today = timezone.now().date()
+    # 3. Real totals (no speculative interest math - just what actually happened)
+    total_deposited = Transaction.objects.filter(target_savings_box=box).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+    total_withdrawn = Transaction.objects.filter(source_savings_box=box).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+    net_movements = total_deposited - total_withdrawn
 
-    for i in range(7):
-        future_date = today + relativedelta(months=i)
-        chart_labels.append(future_date.strftime("%b/%y"))
-        chart_data.append(float(box.current_balance * ((1 + monthly_rate) ** i)))
+    # All-time yield, from the logged sync events (not a speculative CDI projection)
+    realized_yield = SavingsBoxYieldEvent.objects.filter(box=box).aggregate(Sum('amount'))['amount__sum'] or 0
+    windowed = _compute_windowed_yield(box, today)
+
+    # Yield as a % of what was actually put in (principal), so it's comparable to a
+    # CDI rate or another investment - not just an absolute R$ figure
+    principal_base = box.initial_balance + net_movements
+    yield_percentage = (realized_yield / principal_base * 100) if principal_base > 0 else None
+
+    # 4. Balance timeline built event by event (not smoothed by month), so the line
+    # actually rises on each deposit and drops on each withdrawal. Anchored on the real
+    # current balance and walked backwards so the last point always matches it exactly.
+    # Everything is done in Decimal until the very end to avoid float rounding artifacts
+    # (e.g. a withdrawal that should net to exactly zero showing up as -2.27e-13).
+    movements_asc = history.order_by('purchase_date', 'id')
+    balance_labels = ['Início']
+    balance_history_decimal = [box.current_balance - net_movements]
+    running_balance = balance_history_decimal[0]
+    for movement in movements_asc:
+        change = movement.total_amount if movement.target_savings_box_id == box.id else -movement.total_amount
+        running_balance += change
+        balance_labels.append(movement.purchase_date.strftime('%d/%m/%y'))
+        balance_history_decimal.append(running_balance)
+    balance_history = [round(float(value), 2) for value in balance_history_decimal]
 
     context = {
         'box': box,
         'history': history,
         'amount_left_for_goal': amount_left_for_goal,
         'goal_percentage': goal_percentage,
-        'projections': projections,
-        'chart_labels': chart_labels,
-        'chart_data': chart_data,
+        'goal_forecast_date': goal_forecast_date,
+        'goal_forecast_months': goal_forecast_months,
+        'total_deposited': total_deposited,
+        'total_withdrawn': total_withdrawn,
+        'realized_yield': realized_yield,
+        'yield_percentage': yield_percentage,
+        'yield_30_days': windowed['yield_30_days'],
+        'yield_12_months': windowed['yield_12_months'],
+        'is_younger_than_12_months': windowed['is_younger_than_12_months'],
+        'balance_labels': balance_labels,
+        'balance_history': balance_history,
     }
     return render(request, 'savings_box_detail.html', context)
 

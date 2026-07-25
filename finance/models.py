@@ -1,7 +1,6 @@
 from django.db import models
 from django.utils import timezone
 from dateutil.relativedelta import relativedelta
-from decimal import Decimal
 
 # --- BASIC TYPES ---
 class Category(models.Model):
@@ -29,6 +28,10 @@ class CreditCard(models.Model):
 class SavingsBox(models.Model):
     name = models.CharField(max_length=100, verbose_name="Nome")  # Ex: Reserva de Emergência
     current_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Saldo Atual (R$)")
+    initial_balance = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0, verbose_name="Saldo Inicial (R$)",
+        help_text="Congelado na criação da caixinha - não conta como rendimento"
+    )
     cdi_target_pct = models.DecimalField(max_digits=5, decimal_places=2, default=102, verbose_name="% do CDI", help_text="% do CDI (Ex: 100, 102)")
     target_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, verbose_name="Meta (R$)", help_text="Meta em R$ para esta caixinha (Opcional)")
     description = models.TextField(null=True, blank=True, verbose_name="Descrição", help_text="Para que serve esta caixinha? (Opcional)")
@@ -37,13 +40,26 @@ class SavingsBox(models.Model):
         verbose_name="É a sua reserva de emergência?",
         help_text="Marca esta caixinha como sua reserva de emergência para os relatórios (independente do nome dela)"
     )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Criada em")
 
-    def project_next_month(self):
-        # Taxa CDI Mensal Aprox (0.85% ao mês)
-        rate = Decimal(0.0085) * (self.cdi_target_pct / 100)
-        return self.current_balance * (1 + rate)
+    def save(self, *args, **kwargs):
+        if self._state.adding:
+            # Freezes whatever balance the box starts with - it's principal, not yield
+            self.initial_balance = self.current_balance
+        super().save(*args, **kwargs)
 
     def __str__(self): return self.name
+
+
+class SavingsBoxYieldEvent(models.Model):
+    """Logs each time a box's balance is manually synced to the real account, so real
+    yield can be tracked over time instead of guessed from a CDI-based projection"""
+    box = models.ForeignKey(SavingsBox, on_delete=models.CASCADE, related_name='yield_events', verbose_name="Caixinha")
+    date = models.DateField(default=timezone.now, verbose_name="Data")
+    amount = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Valor do Rendimento (R$)")
+
+    def __str__(self):
+        return f"{self.box.name}: R$ {self.amount} em {self.date}"
 
 class SelfLoan(models.Model):
     source_savings_box = models.ForeignKey(SavingsBox, on_delete=models.CASCADE, verbose_name="Caixinha de Origem")
