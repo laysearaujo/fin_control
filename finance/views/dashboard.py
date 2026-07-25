@@ -243,7 +243,7 @@ def dashboard(request):
             'id': bill.id, 'name': bill.title, 'status': status,
             'expected_amount': bill.amount, 'paid_amount': bill.amount if status == 'paid' else 0,
             'day': bill.due_date.day, 'is_credit_card': False, 'kind': 'one_off',
-            'is_overdue': is_overdue,
+            'is_overdue': is_overdue, 'category_id': bill.category_id,
         })
 
     # Pending items float to the top (overdue first), so what needs attention is seen first

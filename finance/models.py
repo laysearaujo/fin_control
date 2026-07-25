@@ -130,6 +130,7 @@ class OneOffBill(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor (R$)")
     due_date = models.DateField(verbose_name="Data de Vencimento")
     category = models.ForeignKey('Category', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Categoria")
+    installment_group = models.UUIDField(null=True, blank=True, db_index=True, verbose_name="Grupo de Parcelamento", help_text="Compartilhado por todas as parcelas de uma mesma conta extra parcelada")
 
     def __str__(self):
         return f"{self.title} - {self.due_date}"

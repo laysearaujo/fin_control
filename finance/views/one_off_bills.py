@@ -1,3 +1,6 @@
+import uuid
+
+from django.contrib import messages
 from django.shortcuts import redirect
 from django.utils import timezone
 from datetime import datetime
@@ -24,6 +27,10 @@ def add_one_off_bill(request):
 
         due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date()
 
+        # Bills split across months share a group id, so editing one installment's value
+        # can find and update the others without ever having to parse the title
+        installment_group = uuid.uuid4() if months_count > 1 else None
+
         # THE TRICK HERE: creates one bill per month
         for i in range(months_count):
             # Advances the month on each repetition
@@ -38,7 +45,8 @@ def add_one_off_bill(request):
                 title=installment_title,
                 amount=amount,
                 due_date=installment_date,
-                category=category_obj
+                category=category_obj,
+                installment_group=installment_group,
             )
 
         return redirect(f'/?mes={due_date.month}&ano={due_date.year}')
@@ -80,6 +88,9 @@ def edit_one_off_bill(request, id):
     bill = OneOffBill.objects.get(id=id)
 
     if request.method == 'POST':
+        original_due_date = bill.due_date
+        original_amount = bill.amount
+
         bill.title = request.POST.get('titulo')
         bill.amount = request.POST.get('valor')
 
@@ -92,6 +103,18 @@ def edit_one_off_bill(request, id):
             bill.category_id = category_id
 
         bill.save()
+
+        # If this installment's value changed and it belongs to a parceled series, carries
+        # the new value forward to the remaining unpaid installments from this date on
+        if bill.installment_group and bill.amount != original_amount:
+            paid_bill_ids = Transaction.objects.filter(one_off_bill__isnull=False).values_list('one_off_bill_id', flat=True)
+            updated_count = OneOffBill.objects.filter(
+                installment_group=bill.installment_group,
+                due_date__gte=original_due_date,
+            ).exclude(id=bill.id).exclude(id__in=paid_bill_ids).update(amount=bill.amount)
+
+            if updated_count:
+                messages.success(request, f"Valor atualizado! Também aplicado a mais {updated_count} parcela(s) futura(s).")
 
         # IF IT'S ALREADY PAID, UPDATES THE TRANSACTION TOO
         txn = Transaction.objects.filter(one_off_bill=bill).first()

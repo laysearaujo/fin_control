@@ -257,7 +257,7 @@
                                                     <label class="form-label text-muted small fw-bold">CATEGORIA</label>
                                                     <select name="categoria_id" class="form-select">
                                                         {% for cat in categories %}
-                                                            <option value="{{ cat.id }}">{{ cat.name }}</option>
+                                                            <option value="{{ cat.id }}" {% if cat.id == item.category_id %}selected{% endif %}>{{ cat.name }}</option>
                                                         {% endfor %}
                                                     </select>
                                                 </div>
