@@ -3,29 +3,43 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h3>💰 Entradas Fixas (Salários)</h3>
-        <p class="text-muted">Valores que entram todo mês automaticamente.</p>
+        <h3 class="fw-bold mb-1">💰 Entradas Fixas (Salários)</h3>
+        <p class="text-muted m-0">Valores que entram todo mês automaticamente.</p>
     </div>
-    <a href="{% url 'nova_receita_fixa' %}" class="btn btn-success">+ Novo Salário Fixo</a>
+    <a href="{% url 'nova_receita_fixa' %}" class="btn btn-dark fw-bold rounded-pill shadow-sm px-4">+ Novo Salário Fixo</a>
 </div>
 
 <div class="row">
     {% for item in incomes %}
     <div class="col-md-4">
-        <div class="card card-custom p-4 mb-3 border-start border-4 border-success">
-            
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <h5 class="fw-bold mb-0">{{ item.description }}</h5>
-                <a href="{% url 'apagar_receita_fixa' item.id %}" class="text-danger small text-decoration-none" title="Apagar salário">
-                    🗑️ Excluir
-                </a>
+        <div class="card card-custom p-4 mb-4 border-start border-4 border-success shadow-sm position-relative">
+
+            <div class="d-flex justify-content-between align-items-start border-bottom pb-3 mb-3">
+                <h5 class="fw-bold mb-0 text-dark">{{ item.description }}</h5>
+
+                <div class="d-flex gap-2">
+                    <a href="{% url 'editar_receita_fixa' item.id %}"
+                       class="btn btn-sm btn-light text-primary border-0 rounded-circle shadow-sm"
+                       style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
+                       title="Editar Salário">
+                        ✏️
+                    </a>
+
+                    <a href="{% url 'apagar_receita_fixa' item.id %}"
+                       class="btn btn-sm btn-light text-danger border-0 rounded-circle shadow-sm"
+                       style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
+                       title="Excluir Salário"
+                       onclick="return confirm('Tem certeza que quer apagar esse salário fixo?')">
+                        🗑️
+                    </a>
+                </div>
             </div>
-            
-            <h3 class="fw-bold text-dark mt-2">R$ {{ item.amount|floatformat:2 }}</h3>
-            
-            <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
-                <small class="text-muted">Dia {{ item.payment_day }}</small>
-                
+
+            <h3 class="fw-bold text-dark m-0">R$ {{ item.amount|floatformat:2 }}</h3>
+
+            <div class="d-flex justify-content-between align-items-center mt-3 pt-2">
+                <small class="text-muted">Dia <strong class="text-dark">{{ item.payment_day }}</strong></small>
+
                 <a href="{% url 'nova_receita' %}?fixa_id={{ item.id }}" class="btn btn-sm btn-success fw-bold rounded-pill px-3 shadow-sm">
                     💲 Receber
                 </a>
@@ -35,9 +49,10 @@
     </div>
     {% empty %}
     <div class="col-12">
-        <div class="alert alert-light text-center py-5 text-muted">
-            <span class="fs-1 d-block mb-2">💼</span>
-            Nenhuma renda fixa cadastrada ainda.
+        <div class="alert bg-white text-center py-5 text-muted border-0 shadow-sm rounded-4">
+            <span class="fs-1 d-block mb-3">💼</span>
+            <h5 class="fw-bold text-dark">Nenhuma renda fixa cadastrada ainda.</h5>
+            <p class="mb-0">Clique no botão acima para cadastrar seu salário ou outra entrada recorrente.</p>
         </div>
     </div>
     {% endfor %}

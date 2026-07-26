@@ -18,7 +18,7 @@
 <div class="row g-4">
     {% for m in grid %}
     <div class="col-6 col-md-4 col-lg-3">
-        <div class="card h-100 shadow-sm text-center p-3 border-0"
+        <div class="card h-100 shadow-sm text-center p-3 border-0 rounded-4 mes-card"
              style="background-color: {{ m.bg_color }};">
 
             <div class="card-body d-flex flex-column">
@@ -70,4 +70,9 @@
     </div>
     {% endfor %}
 </div>
+
+<style>
+    .mes-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+    .mes-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.08) !important; }
+</style>
 {% endblock %}

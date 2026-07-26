@@ -28,20 +28,30 @@ def annual_analysis(request):
             simulated_months.append(start_date + relativedelta(months=i))
 
     # Totals (to avoid querying the DB inside the loop)
-    total_fixed_income = FixedIncome.objects.aggregate(Sum('amount'))['amount__sum'] or 0
+    fixed_incomes = list(FixedIncome.objects.all())
     total_fixed_expense = FixedExpense.objects.aggregate(Sum('expected_amount'))['expected_amount__sum'] or 0
 
     # Loop over the next 12 months
     for i in range(12):
         ref_date = today + relativedelta(months=i)
 
-        # Extra income for the month (e.g. 13th salary)
-        extra_income = Income.objects.filter(
+        # Income actually logged this month (may already include salaries already received)
+        actual_income_this_month = Income.objects.filter(
             date__month=ref_date.month,
             date__year=ref_date.year
         ).aggregate(Sum('amount'))['amount__sum'] or 0
 
-        total_income = total_fixed_income + extra_income
+        # Only forecasts a fixed income if it hasn't already been logged as received this
+        # month - otherwise it'd be counted twice (once as "fixed", once as "actual")
+        forecast_income = 0
+        for fixed_income in fixed_incomes:
+            already_received = Income.objects.filter(
+                fixed_income=fixed_income, date__month=ref_date.month, date__year=ref_date.year
+            ).exists()
+            if not already_received:
+                forecast_income += fixed_income.amount
+
+        total_income = actual_income_this_month + forecast_income
 
         # Installments already committed
         actual_installments = Installment.objects.filter(
@@ -59,7 +69,10 @@ def annual_analysis(request):
                     extra_simulation_cost = simulated_installment_amount
                     break
 
-        final_balance = total_income - (committed + extra_simulation_cost)
+        # "Saldo Final" always reflects the simulated purchase too, whether it leaves the
+        # month positive or tips it into the red - the "+ Simulação" column above still
+        # shows the isolated installment amount either way
+        final_balance = total_income - committed - extra_simulation_cost
 
         months_data.append({
             'month_name': ref_date.strftime("%b/%Y"),

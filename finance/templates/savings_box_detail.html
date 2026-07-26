@@ -114,22 +114,22 @@
                 </div>
             </div>
             <p class="text-muted small text-center mt-3 mb-1">
-                O que essa caixinha rendeu além do saldo inicial e dos seus aportes e resgates — atualizado toda vez que você sincroniza o saldo com o valor real.
+                O que essa caixinha rendeu além do saldo inicial e dos seus aportes e resgates
             </p>
 
             <div class="row text-center g-3 mt-1 pt-3 border-top">
-                <div class="col-6">
+                <div>
                     <small class="text-muted text-uppercase fw-bold d-block" style="font-size: 0.7rem;">📆 Últimos 30 dias</small>
                     <h5 class="fw-bold {% if yield_30_days >= 0 %}text-primary{% else %}text-danger{% endif %} mb-0">
                         {% if yield_30_days >= 0 %}+{% endif %}R$ {{ yield_30_days|floatformat:2 }}
                     </h5>
                 </div>
-                <div class="col-6">
+                <!-- <div class="col-6">
                     <small class="text-muted text-uppercase fw-bold d-block" style="font-size: 0.7rem;">{% if is_younger_than_12_months %}📅 Desde o início{% else %}📅 Em 12 meses{% endif %}</small>
                     <h5 class="fw-bold {% if yield_12_months >= 0 %}text-primary{% else %}text-danger{% endif %} mb-0">
                         {% if yield_12_months >= 0 %}+{% endif %}R$ {{ yield_12_months|floatformat:2 }}
                     </h5>
-                </div>
+                </div> -->
             </div>
         </div>
     </div>

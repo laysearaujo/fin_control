@@ -18,6 +18,24 @@ def new_fixed_income(request):
     return render(request, 'generic_form.html', {'form': form, 'title': '💰 Novo Salário Fixo'})
 
 
+def edit_fixed_income(request, id):
+    # Fetches the fixed income by ID
+    income = get_object_or_404(FixedIncome, id=id)
+
+    # Loads the form already pre-filled with the data (instance=income)
+    form = FixedIncomeForm(request.POST or None, instance=income)
+
+    if form.is_valid():
+        form.save()
+        return redirect('gerenciar_receitas_fixas')
+
+    # If not POST (when clicking the ✏️ button), opens the form screen!
+    return render(request, 'generic_form.html', {
+        'form': form,
+        'title': f'✏️ Editar Salário Fixo: {income.description}'
+    })
+
+
 def edit_income(request, id):
     # Fetches the income entry by ID
     income = get_object_or_404(Income, id=id)

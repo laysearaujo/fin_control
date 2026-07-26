@@ -19,7 +19,7 @@ from .fixed_expenses import (
     edit_fixed_expense, remove_fixed_expense,
 )
 from .fixed_incomes import (
-    manage_fixed_incomes, new_fixed_income, edit_income, delete_fixed_income, delete_income,
+    manage_fixed_incomes, new_fixed_income, edit_fixed_income, edit_income, delete_fixed_income, delete_income,
 )
 from .reports import category_report, annual_report, category_expense_detail
 from .one_off_bills import (

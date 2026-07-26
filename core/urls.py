@@ -47,6 +47,7 @@ urlpatterns = [
     # --- RECEITAS FIXAS (SALÁRIOS) ---
     path('receitas-fixas/', views.manage_fixed_incomes, name='gerenciar_receitas_fixas'),
     path('receitas-fixas/nova/', views.new_fixed_income, name='nova_receita_fixa'),
+    path('receitas-fixas/editar/<int:id>/', views.edit_fixed_income, name='editar_receita_fixa'),
     path('receitas-fixas/apagar/<int:id>/', views.delete_fixed_income, name='apagar_receita_fixa'),
     path('receita/excluir/<int:id>/', views.delete_income, name='excluir_receita'),
     path('receita/editar/<int:id>/', views.edit_income, name='editar_receita'),

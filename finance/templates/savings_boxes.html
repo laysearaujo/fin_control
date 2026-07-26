@@ -98,12 +98,12 @@
                         {% if box.yield_30_days >= 0 %}+{% endif %}R$ {{ box.yield_30_days|floatformat:2 }}
                     </strong>
                 </div>
-                <div class="d-flex justify-content-between align-items-center mt-1">
+                <!-- <div class="d-flex justify-content-between align-items-center mt-1">
                     <span class="text-muted">{% if box.is_younger_than_12_months %}📅 Desde o início:{% else %}📅 Em 12 meses:{% endif %}</span>
                     <strong class="{% if box.yield_12_months >= 0 %}text-success{% else %}text-danger{% endif %}">
                         {% if box.yield_12_months >= 0 %}+{% endif %}R$ {{ box.yield_12_months|floatformat:2 }}
                     </strong>
-                </div>
+                </div> -->
             </div>
 
             <form method="POST" class="mt-auto">
