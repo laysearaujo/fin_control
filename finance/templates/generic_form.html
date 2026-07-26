@@ -107,36 +107,8 @@
         const inputValor = document.getElementById('id_total_amount');
         const inputParcelas = document.getElementById('id_installments_count');
         const form = document.getElementById('formGenerico');
-
-        // --- 2. VARIÁVEIS DA CAIXINHA (NOVO) ---
-        const selectCategoria = document.getElementById('id_category');
-        const divCaixinha = document.getElementById('div_target_savings_box');
-        const inputCaixinha = document.getElementById('id_target_savings_box');
-
-        // ==========================================
-        // LÓGICA DA CAIXINHA DE DESTINO (APORTES)
-        // ==========================================
-        if (selectCategoria && divCaixinha) {
-            function checarMostrarCaixinha() {
-                // Pega a opção selecionada no campo Categoria
-                if (selectCategoria.selectedIndex >= 0) {
-                    const textoOpcao = selectCategoria.options[selectCategoria.selectedIndex].text.toLowerCase();
-                    
-                    // Se o nome da categoria tiver 'aporte', 'reserva' ou 'investimento', exibe o campo
-                    if (textoOpcao.includes('aporte') || textoOpcao.includes('reserva') || textoOpcao.includes('investimento')) {
-                        divCaixinha.style.display = 'block';
-                    } else {
-                        // Se for uma despesa normal, esconde e limpa a caixinha
-                        divCaixinha.style.display = 'none';
-                        if (inputCaixinha) inputCaixinha.value = ''; 
-                    }
-                }
-            }
-
-            // Roda ao carregar a página e toda vez que mudar a categoria
-            checarMostrarCaixinha();
-            selectCategoria.addEventListener('change', checarMostrarCaixinha);
-        }
+        // Note: the "Caixinha de Destino" show/hide-by-category logic now lives in
+        // base.html (wireUpCaixinhaDestino), shared by every form on every page
 
         // ==========================================
         // LÓGICA DO CARTÃO DE CRÉDITO (MANTIDA)

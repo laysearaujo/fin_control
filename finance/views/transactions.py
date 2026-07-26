@@ -31,7 +31,7 @@ def new_transaction(request):
                         box.save()
 
                 messages.success(request, f"Despesa \"{new_transaction_obj.description}\" de R$ {new_transaction_obj.total_amount:.2f} adicionada!")
-                return redirect('dashboard')
+                return redirect(request.META.get('HTTP_REFERER') or 'dashboard')
             except Exception as e:
                 # If something goes wrong, don't crash the app, just log it
                 print(f"Erro ao salvar transação: {e}")
@@ -71,7 +71,9 @@ def new_income(request):
         income.fixed_income = fixed_income
         income.save()
         messages.success(request, f"Receita \"{income.description}\" de R$ {income.amount:.2f} adicionada!")
-        return redirect('dashboard')
+        # Skips the referrer when it came pre-filled from a fixed income (e.g. "Receber
+        # Salário"), so it lands back on the page that actually made sense: the dashboard
+        return redirect('dashboard' if fixed_income else (request.META.get('HTTP_REFERER') or 'dashboard'))
 
     return render(request, 'generic_form.html', {'form': form, 'title': '💰 Registrar Entrada'})
 

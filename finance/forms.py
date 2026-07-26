@@ -22,7 +22,7 @@ class TransactionForm(BootstrapModelForm):
             'description': forms.TextInput(attrs={'placeholder': 'Ex: Mercado, Uber...'}),
             'category': forms.Select(attrs={'class': 'form-select'}),
             'target_savings_box': forms.Select(attrs={'class': 'form-select'}),
-            'is_credit_card': forms.CheckboxInput(attrs={'class': 'form-check-input', 'role': 'switch', 'id': 'check_cartao'}),
+            'is_credit_card': forms.CheckboxInput(attrs={'class': 'form-check-input', 'role': 'switch'}),
             'credit_card': forms.Select(attrs={'class': 'form-select'}),
             'installments_count': forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'value': 1}),
         }
@@ -68,7 +68,7 @@ class FixedExpenseForm(BootstrapModelForm):
              'name': forms.TextInput(attrs={'placeholder': 'Ex: Netflix, Academia...'}),
              'due_day': forms.NumberInput(attrs={'max': 31, 'min': 1}),
              'category': forms.Select(attrs={'class': 'form-select'}),
-             'is_credit_card': forms.CheckboxInput(attrs={'class': 'form-check-input', 'role': 'switch', 'id': 'check_cartao'}),
+             'is_credit_card': forms.CheckboxInput(attrs={'class': 'form-check-input', 'role': 'switch'}),
              'credit_card': forms.Select(attrs={'class': 'form-select', 'id': 'campo_cartao'}),
              'target_savings_box': forms.Select(attrs={'class': 'form-select'}),
         }
