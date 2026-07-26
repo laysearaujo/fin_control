@@ -10,22 +10,26 @@
                 {% csrf_token %}
                 
                 {% if form.is_credit_card %}
-                    <div class="mb-4 form-check form-switch p-3 rounded-3" style="background-color: #f8f9fa; border: 2px solid #e9ecef;">
-                        {{ form.is_credit_card }}
-                        <label class="form-check-label fw-bold text-primary ms-2" style="font-size: 1.1rem; cursor: pointer;" for="{{ form.is_credit_card.id_for_label }}">
-                            💳 Pagar com Cartão de Crédito?
-                        </label>
-                        <div class="small text-muted mt-1 ms-2">Ative para escolher parcelas e lançar na fatura.</div>
+                    <div class="mb-4 toggle-card">
+                        <div class="form-check form-switch">
+                            {{ form.is_credit_card }}
+                            <label class="form-check-label" for="{{ form.is_credit_card.id_for_label }}">
+                                <span class="toggle-title text-primary">💳 Pagar com Cartão de Crédito?</span>
+                                <span class="toggle-subtitle">Ative para escolher parcelas e lançar na fatura.</span>
+                            </label>
+                        </div>
                     </div>
                 {% endif %}
 
                 {% if form.reverse_logic %}
-                    <div class="mb-4 form-check form-switch p-3 rounded-3" style="background-color: #e8f5e9; border: 2px solid #c8e6c9;">
-                        {{ form.reverse_logic }}
-                        <label class="form-check-label fw-bold text-success ms-2" style="font-size: 1.1rem; cursor: pointer;" for="{{ form.reverse_logic.id_for_label }}">
-                            🔄 É uma categoria de Aporte / Reserva?
-                        </label>
-                        <div class="small text-muted mt-1 ms-2">Ative para inverter as cores: Guardar mais que a meta ficará verde.</div>
+                    <div class="mb-4 toggle-card toggle-card-success">
+                        <div class="form-check form-switch">
+                            {{ form.reverse_logic }}
+                            <label class="form-check-label" for="{{ form.reverse_logic.id_for_label }}">
+                                <span class="toggle-title text-success">🔄 É uma categoria de Aporte / Reserva?</span>
+                                <span class="toggle-subtitle">Ative para inverter as cores: guardar mais que a meta ficará verde.</span>
+                            </label>
+                        </div>
                     </div>
                 {% endif %}
                 
@@ -51,6 +55,49 @@
     </div>
 </div>
 
+<style>
+    .toggle-card {
+        display: flex;
+        align-items: center;
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 14px;
+        padding: 1rem 1.25rem;
+    }
+    .toggle-card-success {
+        background-color: #eaf7ee;
+        border-color: #c8e6c9;
+    }
+    .toggle-card .form-check {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding-left: 0;
+        margin: 0;
+    }
+    .toggle-card .form-check-input {
+        width: 3em;
+        height: 1.6em;
+        margin: 0;
+        flex-shrink: 0;
+        cursor: pointer;
+    }
+    .toggle-card .form-check-label {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        cursor: pointer;
+    }
+    .toggle-title {
+        font-weight: 700;
+        font-size: 1rem;
+    }
+    .toggle-subtitle {
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+</style>
+
 <script>
     document.addEventListener("DOMContentLoaded", function() {
         // --- 1. VARIÁVEIS DO CARTÃO ---
@@ -62,14 +109,6 @@
         const form = document.getElementById('formGenerico');
 
         // --- 2. VARIÁVEIS DA CAIXINHA (NOVO) ---
-        const checkLogica = document.getElementById('id_reverse_logic');
-        if (checkLogica) {
-            checkLogica.classList.remove("form-control", "form-control-lg");
-            checkLogica.classList.add("form-check-input"); // Essencial pro Bootstrap fazer o botão deslizar
-            checkLogica.style.width = "2.8em";
-            checkLogica.style.height = "1.5em";
-            checkLogica.style.cursor = "pointer";
-        }
         const selectCategoria = document.getElementById('id_category');
         const divCaixinha = document.getElementById('div_target_savings_box');
         const inputCaixinha = document.getElementById('id_target_savings_box');
@@ -103,12 +142,6 @@
         // LÓGICA DO CARTÃO DE CRÉDITO (MANTIDA)
         // ==========================================
         if (checkbox) {
-            // Arruma o visual do botão (tira a barra gigante do Django)
-            checkbox.classList.remove("form-control", "form-control-lg");
-            checkbox.style.width = "2.8em";
-            checkbox.style.height = "1.5em";
-            checkbox.style.cursor = "pointer";
-
             // VARIÁVEIS PARA A LÓGICA DE VALOR x PARCELA
             let labelValor = null;
             let avisoTotal = null;

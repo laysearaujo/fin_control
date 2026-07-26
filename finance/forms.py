@@ -9,6 +9,7 @@ class BootstrapModelForm(forms.ModelForm):
             # Checkboxes precisam da classe do Bootstrap pra virar um switch, não uma barra gigante
             if isinstance(field.widget, forms.CheckboxInput):
                 field.widget.attrs['class'] = 'form-check-input'
+                field.widget.attrs.setdefault('role', 'switch')
             else:
                 field.widget.attrs['class'] = 'form-control form-control-lg'
 
