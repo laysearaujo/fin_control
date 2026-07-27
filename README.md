@@ -1,70 +1,106 @@
-# 💰 FinControl - Gestão Financeira Pessoal
+*[Português](README.md) | English*
 
-Sistema de controle financeiro inteligente desenvolvido com Django. O foco do projeto é oferecer uma visão clara do saldo real (caixa) versus previsões futuras, com tratamento diferenciado para cartões de crédito e investimentos.
+# 💰 Guardião - Personal Finance Management
 
-## 🚀 Funcionalidades Principais
+Personal finance tracker built with Django. The project's focus is giving a clear
+view of your real checking-account balance versus future forecasts, with separate
+handling for credit cards (one or several), fixed/recurring bills, installment-split
+one-off bills, and savings boxes with real (not projected) yield.
 
-- **Dashboard Inteligente:**
-  - Visão temporal: Mês Passado (Histórico), Mês Atual (Execução) e Meses Futuros (Previsão).
-  - Diferenciação entre "Saldo em Conta" e "Fatura de Cartão".
-  
-- **💳 Gestão de Cartão de Crédito:**
-  - Lançamento de despesas com parcelamento automático.
-  - Reconhecimento inteligente do dia de fechamento (jogando compras para o mês seguinte).
-  - Pagamento de fatura: abate do saldo apenas no ato do pagamento.
-  - Assinaturas recorrentes (ex: Netflix) somadas automaticamente na previsão da fatura.
+For technical architecture and business-rule details, see
+[DOCUMENTATION.md](DOCUMENTATION.md).
 
-- **🐖 Caixinhas & Investimentos:**
-  - Sistema de "Caixinhas" para separar dinheiro do saldo corrente.
-  - Projeção de rendimento baseada no CDI.
-  - Funcionalidade de "Auto-Empréstimo" e aportes diretos do saldo.
+## 🚀 Key Features
 
-- **📊 Relatórios:**
-  - **Semáforo Anual:** Visão macro do ano (Verde/Vermelho) para identificar meses críticos.
-  - **Gráficos por Categoria:** Análise de gastos (Pizza/Barras).
-  - Extrato detalhado para auditoria de lançamentos.
+- **📊 Smart Dashboard:**
+  - Time-travel view: navigate between Last Month (Historical), Current Month
+    (Execution), and Future Months (Forecast).
+  - Clear separation between "Checking Balance" and "Credit Card Invoice".
+  - This month's bills (recurring + one-off) sorted by urgency, with a progress bar
+    of how many are already paid.
+  - A "Recent Movements" feed for the month, right on the home screen.
+  - "+ Expense" and "+ Income" buttons open a quick-add modal from any page.
 
-## 🛠️ Tecnologias Utilizadas
+- **💳 Credit Cards (multiple):**
+  - Supports more than one card, each with its own closing/due day and its own
+    invoice — paying one card never affects another.
+  - Expense entry with automatic installment splitting, aware of the card's closing
+    date (a purchase made close to closing rolls into next month's invoice).
+  - Recurring subscriptions (e.g. Netflix) automatically added to the invoice.
+  - Per-card invoice breakdown, including how much is already accumulating for next
+    month.
 
-- **Backend:** Python 3.12, Django 5.x
-- **Banco de Dados:** SQLite (Padrão)
-- **Frontend:** HTML5, CSS3 (Bootstrap 5), JavaScript (Chart.js)
-- **Bibliotecas:** `python-dateutil` (cálculos de data), `django-bootstrap-v5`.
+- **🐖 Savings Boxes ("Caixinhas"):**
+  - Set money aside from your checking balance via deposits and withdrawals.
+  - **Real** yield, calculated from your balance-sync history — no speculative rate
+    projection. Shows yield over the last 30 days and the last 12 months (or since
+    creation, if the box is younger than that).
+  - Goal-completion forecast based on your actual growth pace.
+  - An event-by-event balance chart (rises on every deposit, drops on every
+    withdrawal).
+  - "Self-loan" feature (borrow from a box, pay yourself back with interest).
 
-## ⚙️ Como rodar o projeto localmente
+- **📜 Statement ("Extrato"):**
+  - Every movement grouped by month, each group collapsible (only the current month
+    starts expanded).
+  - Filter by month, year, and free-text description search.
 
-1. **Clone o repositório:**
+- **📈 Analytics ("Análises"):**
+  - A 3-month traffic light (green/yellow/red) to spot critical months.
+  - Real Cost and Contribution Allocation charts.
+  - A Net Worth (Patrimônio) chart showing savings boxes' evolution over time.
+  - An Emergency Reserve panel.
+  - An Annual View with all 12 months side by side.
+  - Installment purchase simulator: see the impact of a new purchase on the next 12
+    months' cash flow before committing to it.
+
+- **📂 Planning:**
+  - Monthly spending cap per category and how much has been spent/contributed in
+    each.
+
+## 🛠️ Tech Stack
+
+- **Backend:** Python, Django 6.0
+- **Database:** SQLite
+- **Frontend:** HTML5, Bootstrap 5 (via CDN), vanilla JavaScript, Chart.js — no build
+  step, no JS framework
+- **Libraries:** `python-dateutil` (date math)
+
+## ⚙️ Running Locally
+
+1. **Clone the repository:**
+
    ```bash
-   git clone [https://github.com/SEU_USUARIO/fin_control.git](https://github.com/SEU_USUARIO/fin_control.git)
+   git clone https://github.com/YOUR_USERNAME/fin_control.git
    cd fin_control
    ```
 
-2. **Crie e ative um ambiente virtual:**
+2. **Create and activate a virtual environment:**
 
-    ```Bash
-    python -m venv venv
-    # No Windows:
+    ```bash
+    python3 -m venv venv
+    # On Windows:
     venv\Scripts\activate
-    # No Mac/Linux:
+    # On Mac/Linux:
     source venv/bin/activate
     ```
 
-3. **Instale as dependências:**
+3. **Install dependencies:**
 
-    ```Bash
+    ```bash
     pip install -r requirements.txt
     ```
 
-4. **Prepare o Banco de Dados:**
+4. **Set up the database:**
 
-    ```Bash
+    ```bash
     python manage.py migrate
     ```
 
-5. **Inicie o Servidor:**
+5. **Start the server:**
 
-    ```Bash
+    ```bash
     python manage.py runserver
     ```
 
-6. Acesse: Abra `http://127.0.0.1:8000/` no navegador.
+6. Open `http://127.0.0.1:8000/` in your browser.
