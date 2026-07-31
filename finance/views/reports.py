@@ -5,6 +5,7 @@ from datetime import date
 from dateutil.relativedelta import relativedelta
 
 from ..models import Category, FixedIncome, FixedExpense, Transaction, Installment, Income, SavingsBox, OneOffBill
+from .categories import _count_pending_categorization
 
 # Python's strftime('%B')/('%b') depends on the OS locale being installed, which isn't reliable
 # in every environment — so month names are spelled out by hand instead.
@@ -419,6 +420,7 @@ def category_report(request):
         'total_planned': total_planned,
         'total_planned_spent': total_planned_spent,
         'planned_leftover': planned_leftover,
+        'total_pending_categorization': _count_pending_categorization(),
     }
     return render(request, 'category_report.html', context)
 

@@ -37,6 +37,7 @@ urlpatterns = [
     path('categorias/guardar-sobra/', views.save_leftover, name='guardar_sobra'),
     path('categorias/editar/<int:id>/', views.edit_category, name='editar_categoria'),
     path('categorias/apagar/<int:id>/', views.delete_category, name='apagar_categoria'),
+    path('categorias/recategorizar/', views.recategorize_pending, name='recategorizar_pendentes'),
 
     # --- GASTOS FIXOS (CONTAS) ---
     path('fixos/', views.manage_fixed_expenses, name='gerenciar_fixos'),

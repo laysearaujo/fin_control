@@ -13,6 +13,7 @@ from .credit_cards import (
 )
 from .categories import (
     manage_categories, delete_category, save_leftover, new_category, edit_category,
+    recategorize_pending,
 )
 from .fixed_expenses import (
     manage_fixed_expenses, new_fixed_expense, delete_fixed_expense, pay_fixed_expense,

@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold mb-1">🏷️ Recategorizar Pendências</h3>
+        <p class="text-muted m-0">{{ total_pending }} item(ns) sem categoria. Escolha uma categoria pra cada um e salve tudo de uma vez.</p>
+    </div>
+    <a href="{% url 'relatorio_categorias' %}" class="btn btn-sm btn-light border rounded-pill px-3">
+        ⬅️ Voltar para Análises
+    </a>
+</div>
+
+{% if total_pending == 0 %}
+    <div class="card border-0 shadow-sm rounded-4 text-center py-5">
+        <span class="fs-1 d-block mb-2">🎉</span>
+        <h5 class="fw-bold">Tudo categorizado!</h5>
+        <p class="text-muted mb-0">Não há nenhuma pendência no momento.</p>
+    </div>
+{% else %}
+<form method="POST">
+    {% csrf_token %}
+
+    {% if pending_transactions %}
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-white border-0 pt-4 px-4">
+            <h5 class="fw-bold m-0">💸 Transações ({{ pending_transactions|length }})</h5>
+        </div>
+        <div class="card-body px-4 pb-3">
+            {% for item in pending_transactions %}
+            <div class="d-flex justify-content-between align-items-center py-2 {% if not forloop.last %}border-bottom{% endif %}">
+                <div>
+                    <div class="fw-bold text-dark small">{{ item.description }}</div>
+                    <div class="text-muted" style="font-size: 0.75rem;">
+                        {{ item.purchase_date|date:"d/m/Y" }} · R$ {{ item.total_amount|floatformat:2 }}
+                        {% if item.is_credit_card %} · 💳 Cartão{% endif %}
+                    </div>
+                </div>
+                <select name="transaction_{{ item.id }}" class="form-select" style="width: 220px;">
+                    <option value="">Sem categoria</option>
+                    {% for cat in categories %}
+                        <option value="{{ cat.id }}">{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if pending_fixed_expenses %}
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-white border-0 pt-4 px-4">
+            <h5 class="fw-bold m-0">🏠 Contas Fixas ({{ pending_fixed_expenses|length }})</h5>
+        </div>
+        <div class="card-body px-4 pb-3">
+            {% for item in pending_fixed_expenses %}
+            <div class="d-flex justify-content-between align-items-center py-2 {% if not forloop.last %}border-bottom{% endif %}">
+                <div>
+                    <div class="fw-bold text-dark small">{{ item.name }}</div>
+                    <div class="text-muted" style="font-size: 0.75rem;">
+                        Vence dia {{ item.due_day }} · R$ {{ item.expected_amount|floatformat:2 }}
+                        {% if item.is_credit_card %} · 💳 Cartão{% endif %}
+                    </div>
+                </div>
+                <select name="fixedexpense_{{ item.id }}" class="form-select" style="width: 220px;">
+                    <option value="">Sem categoria</option>
+                    {% for cat in categories %}
+                        <option value="{{ cat.id }}">{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if pending_one_off_bills %}
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-white border-0 pt-4 px-4">
+            <h5 class="fw-bold m-0">🧾 Contas Extras ({{ pending_one_off_bills|length }})</h5>
+        </div>
+        <div class="card-body px-4 pb-3">
+            {% for item in pending_one_off_bills %}
+            <div class="d-flex justify-content-between align-items-center py-2 {% if not forloop.last %}border-bottom{% endif %}">
+                <div>
+                    <div class="fw-bold text-dark small">{{ item.title }}</div>
+                    <div class="text-muted" style="font-size: 0.75rem;">
+                        {{ item.due_date|date:"d/m/Y" }} · R$ {{ item.amount|floatformat:2 }}
+                    </div>
+                </div>
+                <select name="oneoffbill_{{ item.id }}" class="form-select" style="width: 220px;">
+                    <option value="">Sem categoria</option>
+                    {% for cat in categories %}
+                        <option value="{{ cat.id }}">{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="position-sticky bottom-0 pb-3 pt-2 bg-opacity-75" style="background: linear-gradient(to top, #f4f6f9 70%, transparent);">
+        <button type="submit" class="btn btn-dark w-100 btn-lg rounded-pill fw-bold shadow-sm">
+            Salvar Tudo
+        </button>
+    </div>
+</form>
+{% endif %}
+{% endblock %}

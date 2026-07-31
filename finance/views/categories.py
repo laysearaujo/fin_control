@@ -1,12 +1,24 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
 from django.db.models import Sum
 from django.utils import timezone
 from datetime import date
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
 
-from ..models import Category, FixedIncome, Transaction, Installment, FixedExpense, SavingsBox
+from ..models import Category, FixedIncome, Transaction, Installment, FixedExpense, SavingsBox, OneOffBill
 from ..forms import CategoryForm
+
+
+def _count_pending_categorization():
+    """How many Transaction/FixedExpense/OneOffBill rows still need a category
+    assigned. Invoice payments and cheque-especial labels are excluded - they're
+    lump sums / cosmetic entries that never have a category by design."""
+    return (
+        Transaction.objects.filter(category__isnull=True, is_invoice_payment=False, is_overdraft_payment=False).count()
+        + FixedExpense.objects.filter(category__isnull=True).count()
+        + OneOffBill.objects.filter(category__isnull=True).count()
+    )
 
 
 def manage_categories(request):
@@ -86,12 +98,15 @@ def manage_categories(request):
     # Fetches the savings boxes for the "save the leftover" modal
     box_list = SavingsBox.objects.all()
 
+    total_pending_categorization = _count_pending_categorization()
+
     context = {
         'categories': categories_with_details,
         'total_fixed_income': total_fixed_income,
         'total_planned': total_planned,
         'forecast_leftover': forecast_leftover,
         'boxes': box_list,
+        'total_pending_categorization': total_pending_categorization,
 
         'ref_date': ref_date,
         'prev_month_url': f"?mes={previous_month.month}&ano={previous_month.year}",
@@ -154,3 +169,40 @@ def edit_category(request, id):
         'form': form,
         'title': f'✏️ Editar Categoria: {category.name}'
     })
+
+
+def recategorize_pending(request):
+    """Bulk-assigns a category to every Transaction/FixedExpense/OneOffBill that
+    doesn't have one yet, in a single screen instead of editing each one by one"""
+    if request.method == 'POST':
+        updated = 0
+        for key, value in request.POST.items():
+            if not value or '_' not in key:
+                continue
+            model_name, _, obj_id = key.partition('_')
+            model = {'transaction': Transaction, 'fixedexpense': FixedExpense, 'oneoffbill': OneOffBill}.get(model_name)
+            if model is None:
+                continue
+            updated += model.objects.filter(id=obj_id).update(category_id=value)
+
+        if updated:
+            messages.success(request, f"{updated} item(ns) recategorizado(s)!")
+        return redirect('recategorizar_pendentes')
+
+    # Invoice payments and cheque-especial labels are lump sums / cosmetic entries -
+    # they never have a category by design (the installments/purchases behind them
+    # already carry their own), so they don't belong on a "needs a category" list
+    pending_transactions = Transaction.objects.filter(
+        category__isnull=True, is_invoice_payment=False, is_overdraft_payment=False
+    ).order_by('-purchase_date', '-id')
+    pending_fixed_expenses = FixedExpense.objects.filter(category__isnull=True).order_by('name')
+    pending_one_off_bills = OneOffBill.objects.filter(category__isnull=True).order_by('-due_date')
+
+    context = {
+        'pending_transactions': pending_transactions,
+        'pending_fixed_expenses': pending_fixed_expenses,
+        'pending_one_off_bills': pending_one_off_bills,
+        'total_pending': pending_transactions.count() + pending_fixed_expenses.count() + pending_one_off_bills.count(),
+        'categories': Category.objects.all(),
+    }
+    return render(request, 'recategorize_pending.html', context)
