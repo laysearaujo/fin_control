@@ -1,13 +1,97 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.db import transaction
+from django.db.models import Sum
 from django.utils import timezone
 from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 
-from ..models import Transaction, Income, FixedIncome, Installment
+from ..models import Transaction, Income, FixedIncome, Installment, SavingsBox
 from ..forms import TransactionForm, IncomeForm
 from .reports import MESES_PT
+
+
+def _reverse_savings_box_effect(txn):
+    """Undoes whatever a transaction did to a savings box's balance when it was
+    created - an aporte's deposit, or a resgate's withdrawal.
+
+    Boxes are re-fetched by id rather than read off txn.target_savings_box /
+    txn.source_savings_box: a form-bound instance caches those related objects
+    during validation (ModelChoiceField.clean() resolves and caches them), so
+    reading the cached relation here could apply this effect to a stale, pre-edit
+    copy of the box and silently overwrite whatever _apply_savings_box_effect
+    (or anything else) saved to it in between.
+    """
+    if txn.target_savings_box_id and txn.category and txn.category.reverse_logic:
+        box = SavingsBox.objects.get(id=txn.target_savings_box_id)
+        box.current_balance -= txn.total_amount
+        box.save()
+    if txn.source_savings_box_id:
+        box = SavingsBox.objects.get(id=txn.source_savings_box_id)
+        box.current_balance += txn.total_amount
+        box.save()
+
+
+def _apply_savings_box_effect(txn):
+    """The inverse of _reverse_savings_box_effect - (re)applies a transaction's effect
+    on a savings box's balance. See that function's docstring for why boxes are
+    re-fetched by id instead of via the cached FK relation."""
+    if txn.target_savings_box_id and txn.category and txn.category.reverse_logic:
+        box = SavingsBox.objects.get(id=txn.target_savings_box_id)
+        box.current_balance += txn.total_amount
+        box.save()
+    if txn.source_savings_box_id:
+        box = SavingsBox.objects.get(id=txn.source_savings_box_id)
+        box.current_balance -= txn.total_amount
+        box.save()
+
+
+def _create_overdraft_payment_if_needed(income):
+    """When new income arrives and the real balance right before it was negative
+    (you were in the "cheque especial"), labels part of that income as paying it off.
+
+    The label is a Transaction with is_overdraft_payment=True AND is_internal_transfer=True:
+    the internal-transfer flag is what makes every existing balance calculation
+    (dashboard.py, reports.py) already exclude it automatically, so it never double-counts
+    the deficit that's already embedded in the running income-minus-expenses math. It only
+    exists to make that deficit visible in the Extrato/Dashboard as an explicit line, and
+    that's why it's a plain flag rather than something inferred from its description text.
+
+    Because these labels don't affect the real balance, "how much of the deficit is
+    already labeled" has to be tracked separately by summing past labels - the real
+    balance calculation is blind to them by design.
+    """
+    real_balance_before = (
+        Income.objects.filter(date__lt=income.date).aggregate(Sum('amount'))['amount__sum'] or 0
+    ) - (
+        Transaction.objects.filter(is_credit_card=False, is_internal_transfer=False, purchase_date__lt=income.date)
+        .aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+    )
+
+    if real_balance_before >= 0:
+        return None
+
+    total_deficit = abs(real_balance_before)
+
+    already_labeled = Transaction.objects.filter(
+        is_overdraft_payment=True, purchase_date__lt=income.date
+    ).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+
+    remaining_deficit = total_deficit - already_labeled
+    if remaining_deficit <= 0:
+        return None
+
+    payment_amount = min(income.amount, remaining_deficit)
+
+    Transaction.objects.create(
+        description="Pagamento Cheque Especial",
+        total_amount=payment_amount,
+        purchase_date=income.date,
+        is_credit_card=False,
+        is_internal_transfer=True,
+        is_overdraft_payment=True,
+    )
+    return payment_amount
 
 
 def new_transaction(request):
@@ -71,6 +155,11 @@ def new_income(request):
         income.fixed_income = fixed_income
         income.save()
         messages.success(request, f"Receita \"{income.description}\" de R$ {income.amount:.2f} adicionada!")
+
+        overdraft_payment = _create_overdraft_payment_if_needed(income)
+        if overdraft_payment:
+            messages.info(request, f"R$ {overdraft_payment:.2f} dessa receita foi usado pra quitar o cheque especial do saldo negativo anterior.")
+
         # Skips the referrer when it came pre-filled from a fixed income (e.g. "Receber
         # Salário"), so it lands back on the page that actually made sense: the dashboard
         return redirect('dashboard' if fixed_income else (request.META.get('HTTP_REFERER') or 'dashboard'))
@@ -131,6 +220,7 @@ def statement(request):
             'amount': expense.total_amount,
             'kind': 'expense',  # Marks it as money going out
             'is_credit_card': expense.is_credit_card,
+            'is_overdraft_payment': expense.is_overdraft_payment,
             'id': expense.id,
             'source_model': 'transaction'
         })
@@ -186,9 +276,17 @@ def edit_transaction(request, id):
     if request.method == 'POST':
         form = TransactionForm(request.POST, instance=txn)
         if form.is_valid():
-            saved_txn = form.save()
+            # Snapshots the old state before the form overwrites it in place, so
+            # whatever it did to a savings box's balance can be undone first - editing
+            # the amount, the category, or which box it's linked to must all be
+            # reflected in that box's real balance, not just on the transaction itself
+            old_txn = Transaction.objects.get(id=txn.id)
+            _reverse_savings_box_effect(old_txn)
 
-            # If it's a credit card purchase, rebuild the installments using the card's rules
+            saved_txn = form.save()
+            _apply_savings_box_effect(saved_txn)
+
+            # If it's (still) a credit card purchase, rebuild the installments using the card's rules
             if saved_txn.is_credit_card and saved_txn.credit_card:
                 # 1. Deletes the old installments linked to this transaction
                 Installment.objects.filter(transaction=saved_txn).delete()
@@ -208,6 +306,11 @@ def edit_transaction(request, id):
                         amount=installment_amount,
                         due_date=actual_due_date
                     )
+            else:
+                # No longer a credit card purchase (or lost its card) - any installments
+                # from before the edit would otherwise be orphaned and keep counting
+                # toward future invoices
+                Installment.objects.filter(transaction=saved_txn).delete()
 
             return redirect('extrato')
     else:
@@ -222,5 +325,6 @@ def edit_transaction(request, id):
 def delete_transaction(request, id):
     """Allows deleting a wrong entry"""
     txn = get_object_or_404(Transaction, id=id)
+    _reverse_savings_box_effect(txn)
     txn.delete()
     return redirect(request.META.get('HTTP_REFERER', '/'))

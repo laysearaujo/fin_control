@@ -379,17 +379,17 @@
                 {% for item in recent_movements %}
                 <div class="d-flex justify-content-between align-items-center py-2 {% if not forloop.last %}border-bottom{% endif %}">
                     <div class="d-flex align-items-center gap-2">
-                        <span class="rounded-circle d-flex align-items-center justify-content-center {% if item.kind == 'income' %}bg-success bg-opacity-10{% else %}bg-danger bg-opacity-10{% endif %}" style="width: 36px; height: 36px; font-size: 1rem; flex-shrink: 0;">
-                            {% if item.kind == 'income' %}⬆️{% else %}⬇️{% endif %}
+                        <span class="rounded-circle d-flex align-items-center justify-content-center {% if item.kind == 'income' %}bg-success bg-opacity-10{% elif item.is_overdraft_payment %}bg-warning bg-opacity-10{% else %}bg-danger bg-opacity-10{% endif %}" style="width: 36px; height: 36px; font-size: 1rem; flex-shrink: 0;">
+                            {% if item.kind == 'income' %}⬆️{% elif item.is_overdraft_payment %}🏦{% else %}⬇️{% endif %}
                         </span>
                         <div>
                             <div class="fw-bold text-dark small">{{ item.description }}</div>
                             <div class="text-muted" style="font-size: 0.75rem;">
-                                {{ item.date|date:"d/m/Y" }}{% if item.is_credit_card %} · 💳 Cartão{% endif %}{% if item.is_internal_transfer %} · 🐖 Caixinha{% endif %}
+                                {{ item.date|date:"d/m/Y" }}{% if item.is_credit_card %} · 💳 Cartão{% endif %}{% if item.is_overdraft_payment %} · quita saldo negativo anterior{% elif item.is_internal_transfer %} · 🐖 Caixinha{% endif %}
                             </div>
                         </div>
                     </div>
-                    <span class="fw-bold valor-sensivel {% if item.kind == 'income' %}text-success{% else %}text-danger{% endif %}">
+                    <span class="fw-bold valor-sensivel {% if item.kind == 'income' %}text-success{% elif item.is_overdraft_payment %}text-warning{% else %}text-danger{% endif %}">
                         {% if item.kind == 'income' %}+{% else %}-{% endif %} R$ {{ item.amount|floatformat:2 }}
                     </span>
                 </div>

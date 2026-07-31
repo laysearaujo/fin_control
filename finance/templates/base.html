@@ -248,6 +248,15 @@
         wireUpCaixinhaDestino('id_');
         wireUpCartaoToggle('navbar_expense_');
     });
+
+    // Clicking anywhere in a date field opens the native calendar picker, not just
+    // the small calendar icon - delegated on document so it covers every date input
+    // on the page, including ones inside modals
+    document.addEventListener('click', function(e) {
+        if (e.target.matches && e.target.matches('input[type="date"]') && e.target.showPicker) {
+            try { e.target.showPicker(); } catch (err) { /* unsupported browser, ignore */ }
+        }
+    });
 </script>
 </body>
 </html>

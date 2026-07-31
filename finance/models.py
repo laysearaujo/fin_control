@@ -120,6 +120,11 @@ class Transaction(models.Model):
     source_savings_box = models.ForeignKey('SavingsBox', on_delete=models.SET_NULL, null=True, blank=True, related_name='outgoing_transactions', verbose_name="Caixinha de Origem")
     is_internal_transfer = models.BooleanField(default=False, verbose_name="É Movimentação Interna?")
 
+    is_overdraft_payment = models.BooleanField(
+        default=False, verbose_name="É Pagamento de Cheque Especial?",
+        help_text="Rótulo automático criado quando uma receita cobre um saldo negativo de mês anterior - não é gasto novo, por isso também é uma Movimentação Interna"
+    )
+
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
         if self.is_credit_card and self.credit_card:

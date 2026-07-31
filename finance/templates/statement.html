@@ -83,6 +83,9 @@
                             {% if item.is_credit_card %}
                                 <span class="badge bg-warning text-dark border border-warning" style="font-size: 0.65em">CARTÃO</span>
                             {% endif %}
+                            {% if item.is_overdraft_payment %}
+                                <span class="badge bg-warning bg-opacity-10 text-warning border border-warning" style="font-size: 0.65em">🏦 CHEQUE ESPECIAL</span>
+                            {% endif %}
                             {% if item.source_model == 'income' %}
                                 <span class="badge bg-success bg-opacity-10 text-success border border-success" style="font-size: 0.65em">ENTRADA</span>
                             {% endif %}

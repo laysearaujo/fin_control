@@ -286,6 +286,7 @@ def dashboard(request):
             'kind': 'expense',
             'is_credit_card': expense.is_credit_card,
             'is_internal_transfer': expense.is_internal_transfer,
+            'is_overdraft_payment': expense.is_overdraft_payment,
         })
     recent_movements.sort(key=lambda m: m['date'], reverse=True)
     recent_movements = recent_movements[:5]

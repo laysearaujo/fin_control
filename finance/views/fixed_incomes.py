@@ -1,8 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from datetime import datetime
 
 from ..models import FixedIncome, Income
-from ..forms import FixedIncomeForm
+from ..forms import FixedIncomeForm, IncomeForm
 
 
 def manage_fixed_incomes(request):
@@ -39,23 +38,18 @@ def edit_fixed_income(request, id):
 def edit_income(request, id):
     # Fetches the income entry by ID
     income = get_object_or_404(Income, id=id)
+    form = IncomeForm(request.POST or None, instance=income)
 
-    if request.method == 'POST':
-        # Updates the data coming from the modal
-        income.description = request.POST.get('descricao')
-        income.amount = request.POST.get('valor')
-
-        # Converts the date text into a date object
-        new_date = request.POST.get('data')
-        income.date = datetime.strptime(new_date, '%Y-%m-%d').date()
-
-        income.save()
-
+    if form.is_valid():
+        form.save()
         # Redirects to the income's month (so you can see the change)
         return redirect(f'/?mes={income.date.month}&ano={income.date.year}')
 
-    # If accessed directly without a POST, goes back home
-    return redirect('/')
+    # If not POST (when clicking the ✏️ button), opens the form screen
+    return render(request, 'generic_form.html', {
+        'form': form,
+        'title': f'✏️ Editar Receita: {income.description}'
+    })
 
 
 def delete_fixed_income(request, id):

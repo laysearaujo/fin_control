@@ -18,7 +18,7 @@ class TransactionForm(BootstrapModelForm):
         model = Transaction
         fields = ['description', 'total_amount', 'category', 'target_savings_box', 'is_credit_card', 'credit_card', 'installments_count', 'purchase_date']
         widgets = {
-            'purchase_date': forms.DateInput(attrs={'type': 'date'}),
+            'purchase_date': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'),
             'description': forms.TextInput(attrs={'placeholder': 'Ex: Mercado, Uber...'}),
             'category': forms.Select(attrs={'class': 'form-select'}),
             'target_savings_box': forms.Select(attrs={'class': 'form-select'}),
@@ -41,7 +41,7 @@ class IncomeForm(BootstrapModelForm):
         model = Income
         fields = ['description', 'amount', 'date']
         widgets = {
-            'date': forms.DateInput(attrs={'type': 'date'}),
+            'date': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'),
         }
 
 class CreditCardForm(BootstrapModelForm):
@@ -76,7 +76,7 @@ class FixedExpenseForm(BootstrapModelForm):
 class SimulationForm(forms.Form):
     valor_compra = forms.DecimalField(label="Valor da Compra", widget=forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'Ex: 2500.00'}))
     parcelas = forms.IntegerField(label="Nº Parcelas", widget=forms.NumberInput(attrs={'class': 'form-control', 'value': 10}))
-    inicio_pagamento = forms.DateField(label="1ª Parcela em:", widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}))
+    inicio_pagamento = forms.DateField(label="1ª Parcela em:", widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}, format='%Y-%m-%d'))
 
 # --- INITIAL SETUP ---
 class InitialSetupForm(forms.Form):
