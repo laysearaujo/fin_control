@@ -77,7 +77,7 @@
                 </li>
 
                 <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle {% if url_name == 'gerenciar_fixos' or url_name == 'gerenciar_receitas_fixas' or url_name == 'gerenciar_cartoes' or url_name == 'nova_categoria' %}fw-bold text-white{% else %}text-white-50{% endif %}" href="#" role="button" data-bs-toggle="dropdown">
+                    <a class="nav-link dropdown-toggle {% if url_name == 'gerenciar_fixos' or url_name == 'gerenciar_receitas_fixas' or url_name == 'gerenciar_cartoes' or url_name == 'categorias_cadastro' %}fw-bold text-white{% else %}text-white-50{% endif %}" href="#" role="button" data-bs-toggle="dropdown">
                         ⚙️ Cadastros Fixos
                     </a>
                     <ul class="dropdown-menu">
@@ -85,7 +85,7 @@
                         <li><a class="dropdown-item {% if url_name == 'gerenciar_receitas_fixas' %}fw-bold{% endif %}" href="{% url 'gerenciar_receitas_fixas' %}">💰 Salários e Entradas</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item {% if url_name == 'gerenciar_cartoes' %}fw-bold{% endif %}" href="{% url 'gerenciar_cartoes' %}">💳 Cartões de Crédito</a></li>
-                        <li><a class="dropdown-item {% if url_name == 'nova_categoria' %}fw-bold{% endif %}" href="{% url 'nova_categoria' %}">📂 Nova Categoria</a></li>
+                        <li><a class="dropdown-item {% if url_name == 'categorias_cadastro' %}fw-bold{% endif %}" href="{% url 'categorias_cadastro' %}">📂 Categorias</a></li>
                     </ul>
                 </li>
             </ul>

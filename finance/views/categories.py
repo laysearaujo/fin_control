@@ -156,6 +156,24 @@ def new_category(request):
     return render(request, 'generic_form.html', {'form': form, 'title': '📂 Nova Categoria'})
 
 
+def category_cards(request):
+    """Simple CRUD-style card grid for categories, listed under Cadastros Fixos -
+    "+ Nova Categoria" here opens a modal instead of navigating to a new page"""
+    if request.method == 'POST':
+        form = CategoryForm(request.POST)
+        if form.is_valid():
+            new_cat = form.save()
+            messages.success(request, f"Categoria \"{new_cat.name}\" criada!")
+            return redirect('categorias_cadastro')
+    else:
+        form = CategoryForm()
+
+    return render(request, 'category_cards.html', {
+        'categories': Category.objects.all().order_by('name'),
+        'form': form,
+    })
+
+
 def edit_category(request, id):
     category = get_object_or_404(Category, id=id)
     # instance=category pre-fills the form with the current data
