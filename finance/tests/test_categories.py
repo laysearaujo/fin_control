@@ -37,6 +37,39 @@ class CategoryCardsTests(TestCase):
         self.assertEqual(Category.objects.count(), 0)
 
 
+class EditCategoryPopupTests(TestCase):
+    """Editing a category is now a popup on the card-grid page (like creating one),
+    instead of navigating to the old full-page form."""
+
+    def setUp(self):
+        self.client = Client()
+        self.category = Category.objects.create(name='Lazer', monthly_cap=200, reverse_logic=False)
+
+    def test_post_updates_the_category_and_redirects_back_to_the_card_grid(self):
+        response = self.client.post(f'/categorias/editar/{self.category.id}/', {
+            'name': 'Lazer e Cultura', 'monthly_cap': '350.00', 'reverse_logic': '',
+        })
+        self.assertRedirects(response, '/categorias/cadastro/')
+        self.category.refresh_from_db()
+        self.assertEqual(self.category.name, 'Lazer e Cultura')
+        self.assertEqual(self.category.monthly_cap, 350)
+        self.assertFalse(self.category.reverse_logic)
+
+    def test_post_can_turn_on_reverse_logic(self):
+        self.client.post(f'/categorias/editar/{self.category.id}/', {
+            'name': 'Lazer', 'monthly_cap': '200', 'reverse_logic': 'on',
+        })
+        self.category.refresh_from_db()
+        self.assertTrue(self.category.reverse_logic)
+
+    def test_invalid_post_does_not_change_the_category(self):
+        # Missing the required 'name' field
+        self.client.post(f'/categorias/editar/{self.category.id}/', {'monthly_cap': '999'})
+        self.category.refresh_from_db()
+        self.assertEqual(self.category.name, 'Lazer')
+        self.assertEqual(self.category.monthly_cap, 200)
+
+
 class RecategorizePendingTests(TestCase):
     def setUp(self):
         self.client = Client()

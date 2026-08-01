@@ -113,11 +113,32 @@ def _build_month_rows(months, starting_balance, today, total_recurring_fixed_inc
     for month_ref in months:
         month_total, month_deposits, month_cost = compute_month_data(month_ref.month, month_ref.year)
 
+        is_current_or_future_month = month_ref.year > today.year or (month_ref.year == today.year and month_ref.month >= today.month)
+
+        # For the current/future month, forecasts non-card fixed expenses that haven't
+        # posted yet (e.g. the recurring R$2000 aporte due on day 5) - same idea as the
+        # income forecast right below, and matches the Dashboard's own balance projection.
+        if is_current_or_future_month:
+            bank_fixed_expenses = FixedExpense.objects.filter(is_credit_card=False).select_related('category')
+            for expense in bank_fixed_expenses:
+                already_paid = Transaction.objects.filter(
+                    fixed_expense=expense, purchase_date__month=month_ref.month, purchase_date__year=month_ref.year
+                ).exists()
+                if not already_paid:
+                    amount = float(expense.expected_amount)
+                    month_total += amount
+                    if expense.category and expense.category.reverse_logic:
+                        month_deposits += amount
+            month_cost = month_total - month_deposits
+
         posted_total = Income.objects.filter(date__month=month_ref.month, date__year=month_ref.year).aggregate(t=Sum('amount'))['t'] or 0.0
         month_income = float(posted_total)
 
-        # If it's a future month and nothing's posted yet, assumes the expected fixed income
-        if month_income == 0.0 and (month_ref.year > today.year or (month_ref.year == today.year and month_ref.month > today.month)):
+        # If it's the current month or a future one and nothing's posted yet, assumes the
+        # expected fixed income - matches the Dashboard, which forecasts this month's salary
+        # the same way as long as it hasn't actually been received yet (e.g. salary lands on
+        # day 27, so day 1 of the current month legitimately has R$0 posted so far)
+        if month_income == 0.0 and is_current_or_future_month:
             month_income = total_recurring_fixed_income
 
         # Status reflects THIS month alone (income vs. cost), not the running balance
@@ -267,8 +288,13 @@ def category_report(request):
 
         month_grand_total_i, _, month_actual_cost_i = compute_month_data(month_date.month, month_date.year)
 
+        # The current calendar month is still in progress - averaging it in as if it were a
+        # complete month would understate the real cost of living (e.g. viewing this on day 1
+        # would count a near-empty month and drag the average, and the suggested reserve, down)
+        is_still_in_progress = month_date.year == today.year and month_date.month == today.month
+
         # Only counts towards the average's divisor if there was real living cost that month
-        if month_actual_cost_i > 0:
+        if month_actual_cost_i > 0 and not is_still_in_progress:
             months_with_real_spend += 1
             sum_real_cost_history += month_actual_cost_i
 

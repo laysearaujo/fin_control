@@ -23,12 +23,13 @@
                     {% endif %}
                 </div>
                 <div class="d-flex gap-2">
-                    <a href="{% url 'editar_categoria' cat.id %}"
+                    <button type="button"
                        class="btn btn-sm btn-light text-primary border-0 rounded-circle shadow-sm"
                        style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
-                       title="Editar Categoria">
+                       title="Editar Categoria"
+                       data-bs-toggle="modal" data-bs-target="#modalEditarCategoria{{ cat.id }}">
                         ✏️
-                    </a>
+                    </button>
                     <a href="{% url 'apagar_categoria' cat.id %}"
                        class="btn btn-sm btn-light text-danger border-0 rounded-circle shadow-sm"
                        style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
@@ -41,6 +42,42 @@
 
             <small class="text-muted text-uppercase fw-bold d-block" style="font-size: 0.7rem;">Teto Mensal</small>
             <h3 class="fw-bold text-dark m-0">R$ {{ cat.monthly_cap|floatformat:2 }}</h3>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalEditarCategoria{{ cat.id }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow rounded-4">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title fw-bold">✏️ Editar Categoria</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form action="{% url 'editar_categoria' cat.id %}" method="POST">
+                    {% csrf_token %}
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold text-muted small text-uppercase" for="catName{{ cat.id }}">Nome</label>
+                            <input type="text" id="catName{{ cat.id }}" name="name" class="form-control form-control-lg" value="{{ cat.name }}" required>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label fw-bold text-muted small text-uppercase" for="catCap{{ cat.id }}">Teto Mensal</label>
+                            <input type="number" step="0.01" id="catCap{{ cat.id }}" name="monthly_cap" class="form-control form-control-lg" value="{{ cat.monthly_cap|stringformat:'.2f' }}" required>
+                        </div>
+                        <div class="mb-2 toggle-card toggle-card-success">
+                            <div class="form-check form-switch">
+                                <input type="checkbox" name="reverse_logic" class="form-check-input" role="switch" id="reverseLogic{{ cat.id }}" {% if cat.reverse_logic %}checked{% endif %}>
+                                <label class="form-check-label" for="reverseLogic{{ cat.id }}">
+                                    <span class="toggle-title text-success">🔄 É uma categoria de Aporte / Reserva?</span>
+                                    <span class="toggle-subtitle">Ative para inverter as cores: guardar mais que a meta ficará verde.</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-0">
+                        <button type="submit" class="btn btn-dark w-100 rounded-pill fw-bold shadow-sm">Salvar Alterações</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
     {% empty %}

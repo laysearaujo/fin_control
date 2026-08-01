@@ -101,7 +101,10 @@ def delete_savings_box(request, id):
 def savings_box_detail(request, id):
     box = get_object_or_404(SavingsBox, id=id)
 
-    # 1. Fetches every deposit/withdrawal linked to this box
+    # 1. Fetches every deposit/withdrawal linked to this box. Balance syncs ("Atualizar
+    # valor hoje") are deliberately left out of this list - they're not a cash movement,
+    # just a label for how much yield the box already had. They still show up on the
+    # "Evolução do Saldo" chart below, plotted at the date they actually happened.
     history = Transaction.objects.filter(
         Q(target_savings_box=box) | Q(source_savings_box=box)
     ).order_by('-purchase_date')
@@ -145,18 +148,31 @@ def savings_box_detail(request, id):
     yield_percentage = (realized_yield / principal_base * 100) if principal_base > 0 else None
 
     # 4. Balance timeline built event by event (not smoothed by month), so the line
-    # actually rises on each deposit and drops on each withdrawal. Anchored on the real
-    # current balance and walked backwards so the last point always matches it exactly.
+    # actually rises on each deposit/withdrawal and steps on each yield sync, plotted
+    # at the date it really happened. Anchored on initial_balance and walked FORWARD
+    # (rather than backwards from current_balance) specifically so yield events can be
+    # dropped in at their own dates instead of all landing on a single "Início" point.
     # Everything is done in Decimal until the very end to avoid float rounding artifacts
     # (e.g. a withdrawal that should net to exactly zero showing up as -2.27e-13).
-    movements_asc = history.order_by('purchase_date', 'id')
+    timeline_events = [
+        {
+            'date': item.purchase_date,
+            'order': 0,
+            'change': item.total_amount if item.target_savings_box_id == box.id else -item.total_amount,
+        }
+        for item in history
+    ] + [
+        {'date': event.date, 'order': 1, 'change': event.amount}
+        for event in box.yield_events.all()
+    ]
+    timeline_events.sort(key=lambda e: (e['date'], e['order']))
+
     balance_labels = ['Início']
-    balance_history_decimal = [box.current_balance - net_movements]
-    running_balance = balance_history_decimal[0]
-    for movement in movements_asc:
-        change = movement.total_amount if movement.target_savings_box_id == box.id else -movement.total_amount
-        running_balance += change
-        balance_labels.append(movement.purchase_date.strftime('%d/%m/%y'))
+    balance_history_decimal = [box.initial_balance]
+    running_balance = box.initial_balance
+    for event in timeline_events:
+        running_balance += event['change']
+        balance_labels.append(event['date'].strftime('%d/%m/%y'))
         balance_history_decimal.append(running_balance)
     balance_history = [round(float(value), 2) for value in balance_history_decimal]
 

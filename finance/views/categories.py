@@ -175,18 +175,24 @@ def category_cards(request):
 
 
 def edit_category(request, id):
+    """Edited via a per-card popup on the Categorias page - if the form is invalid
+    (e.g. duplicate name), falls back to the classic full-page form so the errors
+    are still visible somewhere."""
     category = get_object_or_404(Category, id=id)
     # instance=category pre-fills the form with the current data
     form = CategoryForm(request.POST or None, instance=category)
 
     if form.is_valid():
         form.save()
-        return redirect('gerenciar_categorias')
+        return redirect('categorias_cadastro')
 
-    return render(request, 'generic_form.html', {
-        'form': form,
-        'title': f'✏️ Editar Categoria: {category.name}'
-    })
+    if request.method == 'POST':
+        return render(request, 'generic_form.html', {
+            'form': form,
+            'title': f'✏️ Editar Categoria: {category.name}'
+        })
+
+    return redirect('categorias_cadastro')
 
 
 def recategorize_pending(request):
