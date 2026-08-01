@@ -11,6 +11,58 @@ from django.utils import timezone
 from ..models import Category, CreditCard, SavingsBox, Transaction, Income, Installment
 
 
+class StatementCreditCardTotalsTests(TestCase):
+    """A parceled credit-card purchase's Transaction.total_amount is the FULL price
+    (e.g. R$7880 for a 7x purchase), not what actually left the account that month -
+    only the Installment amounts (already counted elsewhere via compute_month_data) do
+    that. Counting the raw total here overstated the purchase month's spend."""
+
+    def setUp(self):
+        self.client = Client()
+        self.category = Category.objects.create(name='Viagens')
+        self.card = CreditCard.objects.create(name='Cartão', limit=10000, closing_day=28, due_day=10)
+        self.today = timezone.now().date()
+
+    def test_installment_purchase_total_amount_excluded_from_month_total_expense(self):
+        Transaction.objects.create(
+            description='Passagem', total_amount=7880.67, purchase_date=self.today,
+            category=self.category, is_credit_card=True, credit_card=self.card, installments_count=7,
+        )
+        Transaction.objects.create(
+            description='Mercado', total_amount=100, purchase_date=self.today,
+            category=self.category, is_credit_card=False,
+        )
+
+        response = self.client.get('/extrato/')
+
+        group = response.context['grouped_movements'][0]
+        self.assertEqual(group['total_expense'], 100)
+
+    def test_installment_purchase_still_appears_in_the_items_list(self):
+        txn = Transaction.objects.create(
+            description='Passagem', total_amount=7880.67, purchase_date=self.today,
+            category=self.category, is_credit_card=True, credit_card=self.card, installments_count=7,
+        )
+
+        response = self.client.get('/extrato/')
+
+        group = response.context['grouped_movements'][0]
+        item = next(i for i in group['items'] if i['id'] == txn.id)
+        self.assertEqual(float(item['amount']), 7880.67)
+        self.assertEqual(round(float(item['installment_amount']), 2), 1125.81)
+
+    def test_non_installment_credit_card_purchase_also_excluded_from_total(self):
+        Transaction.objects.create(
+            description='Compra à vista no cartão', total_amount=200, purchase_date=self.today,
+            category=self.category, is_credit_card=True, credit_card=self.card, installments_count=1,
+        )
+
+        response = self.client.get('/extrato/')
+
+        group = response.context['grouped_movements'][0]
+        self.assertEqual(group['total_expense'], 0)
+
+
 class SavingsBoxEffectOnEditDeleteTests(TestCase):
     def setUp(self):
         self.client = Client()

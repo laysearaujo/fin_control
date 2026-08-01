@@ -82,6 +82,11 @@
                             <div class="fw-bold text-dark">{{ item.description }}</div>
                             {% if item.is_credit_card %}
                                 <span class="badge bg-warning text-dark border border-warning" style="font-size: 0.65em">CARTÃO</span>
+                                {% if item.installments_count > 1 %}
+                                    <span class="badge bg-light text-muted border" style="font-size: 0.65em" title="Valor total da compra - parcelado, não sai tudo de uma vez">
+                                        {{ item.installments_count }}x de R$ {{ item.installment_amount|floatformat:2 }}
+                                    </span>
+                                {% endif %}
                             {% endif %}
                             {% if item.is_overdraft_payment %}
                                 <span class="badge bg-warning bg-opacity-10 text-warning border border-warning" style="font-size: 0.65em">🏦 CHEQUE ESPECIAL</span>

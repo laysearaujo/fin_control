@@ -221,6 +221,8 @@ def statement(request):
             'kind': 'expense',  # Marks it as money going out
             'is_credit_card': expense.is_credit_card,
             'is_overdraft_payment': expense.is_overdraft_payment,
+            'installments_count': expense.installments_count,
+            'installment_amount': expense.total_amount / expense.installments_count,
             'id': expense.id,
             'source_model': 'transaction'
         })
@@ -252,7 +254,13 @@ def statement(request):
         current_group['items'].append(movement)
         if movement['kind'] == 'income':
             current_group['total_income'] += movement['amount']
-        else:
+        # A credit-card purchase's total_amount is the FULL price (e.g. a 7x installment
+        # purchase shows R$7880 on the day of purchase), not what actually left the account
+        # that month - that only happens later, either via the parceled Installment amounts
+        # or the lump-sum invoice payment (a separate, is_credit_card=False Transaction).
+        # Counting the raw purchase here would both overstate that single month AND double
+        # count it once the invoice/installments are actually paid.
+        elif not movement.get('is_credit_card'):
             current_group['total_expense'] += movement['amount']
 
     # 6. Every year that actually has data, so the year dropdown only offers real options
