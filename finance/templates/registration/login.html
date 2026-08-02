@@ -1,0 +1,39 @@
+{% extends 'auth_base.html' %}
+
+{% block content %}
+<h4 class="fw-bold text-center mb-1">Bem-vindo de volta</h4>
+<p class="text-muted text-center small mb-4">Acesse sua conta pra continuar</p>
+
+{% if form.errors %}
+<div class="alert alert-danger small py-2">Usuário ou senha inválidos.</div>
+{% endif %}
+
+<form method="POST">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <div class="mb-3">
+        <label class="form-label fw-bold text-muted small text-uppercase" for="id_username">Usuário</label>
+        <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-person-fill"></i></span>
+            <input type="text" name="username" class="form-control auth-input" id="id_username" autofocus required>
+        </div>
+    </div>
+    <div class="mb-4">
+        <label class="form-label fw-bold text-muted small text-uppercase" for="id_password">Senha</label>
+        <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-lock-fill"></i></span>
+            <input type="password" name="password" class="form-control auth-input" id="id_password" required>
+        </div>
+    </div>
+    <button type="submit" class="btn btn-auth-primary w-100">Entrar</button>
+</form>
+
+<div class="signup-teaser text-center mt-4 p-3">
+    <i class="bi bi-shield-lock text-success fs-4 d-block mb-1"></i>
+    <p class="fw-bold text-dark mb-1">Novo por aqui?</p>
+    <p class="text-muted small mb-3">Crie sua conta grátis em menos de um minuto.</p>
+    <a href="{% url 'signup' %}" class="btn btn-success rounded-pill fw-bold px-4">
+        Criar conta
+    </a>
+</div>
+{% endblock %}

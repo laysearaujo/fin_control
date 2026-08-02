@@ -1,16 +1,36 @@
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 from dateutil.relativedelta import relativedelta
 
+
+class OwnedQuerySet(models.QuerySet):
+    def for_user(self, user):
+        return self.filter(owner=user)
+
+
+class OwnedModel(models.Model):
+    """Every top-level model gets its own owner, so each person's data is fully
+    isolated from everyone else's - never matched by name/similarity, always by
+    this FK. Models that only ever exist hanging off an already-owned parent (e.g.
+    Installment off Transaction, SavingsBoxYieldEvent off SavingsBox) don't need
+    their own owner - they're implicitly scoped through the CASCADE FK."""
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    objects = OwnedQuerySet.as_manager()
+
+    class Meta:
+        abstract = True
+
+
 # --- BASIC TYPES ---
-class Category(models.Model):
+class Category(OwnedModel):
     name = models.CharField(max_length=50, verbose_name="Nome")
     monthly_cap = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Teto Mensal (R$)")
     reverse_logic = models.BooleanField(default=False, verbose_name="É uma categoria de Aporte/Reserva?")
 
     def __str__(self): return self.name
 
-class CreditCard(models.Model):
+class CreditCard(OwnedModel):
     name = models.CharField(max_length=50, verbose_name="Nome")
     limit = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Limite (R$)")
     closing_day = models.IntegerField(verbose_name="Dia de Fechamento")
@@ -25,7 +45,7 @@ class CreditCard(models.Model):
         return purchase_date.replace(day=self.due_day)
 
 # --- INVESTMENTS (SAVINGS BOXES) ---
-class SavingsBox(models.Model):
+class SavingsBox(OwnedModel):
     name = models.CharField(max_length=100, verbose_name="Nome")  # Ex: Reserva de Emergência
     current_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Saldo Atual (R$)")
     initial_balance = models.DecimalField(
@@ -61,7 +81,7 @@ class SavingsBoxYieldEvent(models.Model):
     def __str__(self):
         return f"{self.box.name}: R$ {self.amount} em {self.date}"
 
-class SelfLoan(models.Model):
+class SelfLoan(OwnedModel):
     source_savings_box = models.ForeignKey(SavingsBox, on_delete=models.CASCADE, verbose_name="Caixinha de Origem")
     borrowed_amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor Emprestado (R$)")
     monthly_interest_pct = models.DecimalField(max_digits=5, decimal_places=2, verbose_name="Juros Mensais (%)", help_text="% de juros que você vai se pagar")
@@ -75,12 +95,12 @@ class SelfLoan(models.Model):
         return total_with_interest / self.installments_count
 
 # --- CASH FLOW ---
-class FixedIncome(models.Model):
+class FixedIncome(OwnedModel):
     description = models.CharField(max_length=100, verbose_name="Descrição")
     amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor (R$)")
     payment_day = models.IntegerField(verbose_name="Dia de Recebimento")
 
-class FixedExpense(models.Model):
+class FixedExpense(OwnedModel):
     name = models.CharField(max_length=100, verbose_name="Nome")
     expected_amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor Previsto (R$)")
     due_day = models.IntegerField(verbose_name="Dia de Vencimento")
@@ -90,7 +110,7 @@ class FixedExpense(models.Model):
     linked_loan = models.ForeignKey(SelfLoan, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Empréstimo Vinculado")
     target_savings_box = models.ForeignKey('SavingsBox', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Caixinha de Destino", help_text="Se for um aporte, escolha a caixinha de destino")
 
-class Income(models.Model):
+class Income(OwnedModel):
     description = models.CharField(max_length=100, verbose_name="Descrição")
     amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor (R$)")
     date = models.DateField(default=timezone.now, verbose_name="Data")
@@ -99,7 +119,7 @@ class Income(models.Model):
     def __str__(self):
         return f"{self.description} - R$ {self.amount}"
 
-class Transaction(models.Model):
+class Transaction(OwnedModel):
     description = models.CharField(max_length=100, verbose_name="Descrição")
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor Total (R$)")
     purchase_date = models.DateField(default=timezone.now, verbose_name="Data da Compra")
@@ -146,7 +166,7 @@ class Installment(models.Model):
     due_date = models.DateField(verbose_name="Data de Vencimento")
     paid = models.BooleanField(default=False, verbose_name="Pago")
 
-class OneOffBill(models.Model):
+class OneOffBill(OwnedModel):
     title = models.CharField(max_length=100, verbose_name="Título")
     amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor (R$)")
     due_date = models.DateField(verbose_name="Data de Vencimento")

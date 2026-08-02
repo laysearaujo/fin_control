@@ -8,16 +8,17 @@ from decimal import Decimal
 
 from ..models import Category, FixedIncome, Transaction, Installment, FixedExpense, SavingsBox, OneOffBill
 from ..forms import CategoryForm
+from ._helpers import get_owned_or_404
 
 
-def _count_pending_categorization():
+def _count_pending_categorization(user):
     """How many Transaction/FixedExpense/OneOffBill rows still need a category
     assigned. Invoice payments and cheque-especial labels are excluded - they're
     lump sums / cosmetic entries that never have a category by design."""
     return (
-        Transaction.objects.filter(category__isnull=True, is_invoice_payment=False, is_overdraft_payment=False).count()
-        + FixedExpense.objects.filter(category__isnull=True).count()
-        + OneOffBill.objects.filter(category__isnull=True).count()
+        Transaction.objects.for_user(user).filter(category__isnull=True, is_invoice_payment=False, is_overdraft_payment=False).count()
+        + FixedExpense.objects.for_user(user).filter(category__isnull=True).count()
+        + OneOffBill.objects.for_user(user).filter(category__isnull=True).count()
     )
 
 
@@ -51,8 +52,8 @@ def manage_categories(request):
     next_month = ref_date + relativedelta(months=1)
 
     # --- PLANNING SUMMARY ---
-    total_fixed_income = FixedIncome.objects.aggregate(Sum('amount'))['amount__sum'] or 0
-    categories = Category.objects.all()
+    total_fixed_income = FixedIncome.objects.for_user(request.user).aggregate(Sum('amount'))['amount__sum'] or 0
+    categories = Category.objects.for_user(request.user)
     total_planned = categories.aggregate(Sum('monthly_cap'))['monthly_cap__sum'] or 0
     forecast_leftover = total_fixed_income - total_planned
 
@@ -64,6 +65,7 @@ def manage_categories(request):
         # genuinely spent on something real, it just came from a caixinha instead of the
         # checking account, so it still counts as real spend for budgeting purposes.
         debit_spend = Transaction.objects.filter(
+            owner=request.user,
             category=category,
             is_credit_card=False,
             purchase_date__month=ref_date.month,
@@ -71,12 +73,14 @@ def manage_categories(request):
         ).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
 
         card_spend = Installment.objects.filter(
+            transaction__owner=request.user,
             transaction__category=category,
             due_date__month=ref_date.month,
             due_date__year=ref_date.year
         ).aggregate(Sum('amount'))['amount__sum'] or 0
 
         card_fixed_expenses = FixedExpense.objects.filter(
+            owner=request.user,
             category=category,
             is_credit_card=True
         ).aggregate(Sum('expected_amount'))['expected_amount__sum'] or 0
@@ -96,9 +100,9 @@ def manage_categories(request):
         })
 
     # Fetches the savings boxes for the "save the leftover" modal
-    box_list = SavingsBox.objects.all()
+    box_list = SavingsBox.objects.for_user(request.user)
 
-    total_pending_categorization = _count_pending_categorization()
+    total_pending_categorization = _count_pending_categorization(request.user)
 
     context = {
         'categories': categories_with_details,
@@ -117,7 +121,7 @@ def manage_categories(request):
 
 def delete_category(request, id):
     """Allows deleting a category from the system"""
-    category = get_object_or_404(Category, id=id)
+    category = get_owned_or_404(request, Category, id=id)
     category.delete()
     return redirect('gerenciar_categorias')
 
@@ -129,11 +133,12 @@ def save_leftover(request):
         box_id = request.POST.get('caixinha_id')
         amount = Decimal(request.POST.get('valor').replace(',', '.'))
 
-        category = get_object_or_404(Category, id=category_id)
-        box = get_object_or_404(SavingsBox, id=box_id)
+        category = get_owned_or_404(request, Category, id=category_id)
+        box = get_owned_or_404(request, SavingsBox, id=box_id)
 
         # 1. Creates an expense to "take" the money out of the month's balance
         Transaction.objects.create(
+            owner=request.user,
             description=f"Sobra Guardada: {category.name}",
             total_amount=amount,
             purchase_date=timezone.now().date(),
@@ -149,9 +154,11 @@ def save_leftover(request):
 
 
 def new_category(request):
-    form = CategoryForm(request.POST or None)
+    form = CategoryForm(request.POST or None, user=request.user)
     if form.is_valid():
-        form.save()
+        category = form.save(commit=False)
+        category.owner = request.user
+        category.save()
         return redirect('gerenciar_categorias')
     return render(request, 'generic_form.html', {'form': form, 'title': '📂 Nova Categoria'})
 
@@ -160,16 +167,18 @@ def category_cards(request):
     """Simple CRUD-style card grid for categories, listed under Cadastros Fixos -
     "+ Nova Categoria" here opens a modal instead of navigating to a new page"""
     if request.method == 'POST':
-        form = CategoryForm(request.POST)
+        form = CategoryForm(request.POST, user=request.user)
         if form.is_valid():
-            new_cat = form.save()
+            new_cat = form.save(commit=False)
+            new_cat.owner = request.user
+            new_cat.save()
             messages.success(request, f"Categoria \"{new_cat.name}\" criada!")
             return redirect('categorias_cadastro')
     else:
-        form = CategoryForm()
+        form = CategoryForm(user=request.user)
 
     return render(request, 'category_cards.html', {
-        'categories': Category.objects.all().order_by('name'),
+        'categories': Category.objects.for_user(request.user).order_by('name'),
         'form': form,
     })
 
@@ -178,9 +187,9 @@ def edit_category(request, id):
     """Edited via a per-card popup on the Categorias page - if the form is invalid
     (e.g. duplicate name), falls back to the classic full-page form so the errors
     are still visible somewhere."""
-    category = get_object_or_404(Category, id=id)
+    category = get_owned_or_404(request, Category, id=id)
     # instance=category pre-fills the form with the current data
-    form = CategoryForm(request.POST or None, instance=category)
+    form = CategoryForm(request.POST or None, instance=category, user=request.user)
 
     if form.is_valid():
         form.save()
@@ -207,7 +216,7 @@ def recategorize_pending(request):
             model = {'transaction': Transaction, 'fixedexpense': FixedExpense, 'oneoffbill': OneOffBill}.get(model_name)
             if model is None:
                 continue
-            updated += model.objects.filter(id=obj_id).update(category_id=value)
+            updated += model.objects.for_user(request.user).filter(id=obj_id).update(category_id=value)
 
         if updated:
             messages.success(request, f"{updated} item(ns) recategorizado(s)!")
@@ -216,17 +225,17 @@ def recategorize_pending(request):
     # Invoice payments and cheque-especial labels are lump sums / cosmetic entries -
     # they never have a category by design (the installments/purchases behind them
     # already carry their own), so they don't belong on a "needs a category" list
-    pending_transactions = Transaction.objects.filter(
+    pending_transactions = Transaction.objects.for_user(request.user).filter(
         category__isnull=True, is_invoice_payment=False, is_overdraft_payment=False
     ).order_by('-purchase_date', '-id')
-    pending_fixed_expenses = FixedExpense.objects.filter(category__isnull=True).order_by('name')
-    pending_one_off_bills = OneOffBill.objects.filter(category__isnull=True).order_by('-due_date')
+    pending_fixed_expenses = FixedExpense.objects.for_user(request.user).filter(category__isnull=True).order_by('name')
+    pending_one_off_bills = OneOffBill.objects.for_user(request.user).filter(category__isnull=True).order_by('-due_date')
 
     context = {
         'pending_transactions': pending_transactions,
         'pending_fixed_expenses': pending_fixed_expenses,
         'pending_one_off_bills': pending_one_off_bills,
         'total_pending': pending_transactions.count() + pending_fixed_expenses.count() + pending_one_off_bills.count(),
-        'categories': Category.objects.all(),
+        'categories': Category.objects.for_user(request.user),
     }
     return render(request, 'recategorize_pending.html', context)

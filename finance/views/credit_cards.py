@@ -1,26 +1,29 @@
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import render, redirect
 from django.db.models import Sum
 from django.utils import timezone
 
 from ..models import CreditCard, Transaction, FixedExpense, Installment
 from ..forms import CreditCardForm
+from ._helpers import get_owned_or_404
 
 
 def manage_credit_cards(request):
-    cards = CreditCard.objects.all()
+    cards = CreditCard.objects.for_user(request.user)
     return render(request, 'credit_cards_list.html', {'cards': cards})
 
 
 def new_credit_card(request):
     form = CreditCardForm(request.POST or None)
     if form.is_valid():
-        form.save()
+        card = form.save(commit=False)
+        card.owner = request.user
+        card.save()
         return redirect('gerenciar_cartoes')
     return render(request, 'generic_form.html', {'form': form, 'title': '💳 Novo Cartão'})
 
 
 def edit_credit_card(request, id):
-    card = get_object_or_404(CreditCard, id=id)
+    card = get_owned_or_404(request, CreditCard, id=id)
 
     # Reuses the generic form, pre-filled with the card's data
     form = CreditCardForm(request.POST or None, instance=card)
@@ -36,7 +39,7 @@ def edit_credit_card(request, id):
 
 
 def delete_credit_card(request, id):
-    card = get_object_or_404(CreditCard, id=id)
+    card = get_owned_or_404(request, CreditCard, id=id)
     card.delete()
     return redirect('gerenciar_cartoes')
 
@@ -46,7 +49,7 @@ def pay_monthly_invoice(request, cartao_id):
     month = int(request.GET.get('mes', timezone.now().month))
     year = int(request.GET.get('ano', timezone.now().year))
 
-    card = get_object_or_404(CreditCard, id=cartao_id)
+    card = get_owned_or_404(request, CreditCard, id=cartao_id)
 
     # 1. Calculates the exact amount owed on THIS card
     installments_sum = Installment.objects.filter(
@@ -71,6 +74,7 @@ def pay_monthly_invoice(request, cartao_id):
 
         if not already_paid:
             Transaction.objects.create(
+                owner=request.user,
                 description=f"Pgto Fatura {card.name} ({month}/{year})",
                 total_amount=total_invoice,
                 purchase_date=timezone.now().date(),  # Leaves the balance TODAY

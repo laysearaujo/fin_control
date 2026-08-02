@@ -91,9 +91,28 @@
             </ul>
             {% endwith %}
             
-            <div class="d-flex gap-2 mt-3 mt-lg-0">
+            <div class="d-flex gap-2 align-items-center mt-3 mt-lg-0">
                 <button type="button" class="btn btn-danger btn-sm rounded-pill px-3 fw-bold" data-bs-toggle="modal" data-bs-target="#modalNovaDespesa">+ Despesa</button>
                 <button type="button" class="btn btn-success btn-sm rounded-pill px-3 fw-bold" data-bs-toggle="modal" data-bs-target="#modalNovaReceita">+ Receita</button>
+                {% if user.is_authenticated %}
+                <div class="dropdown">
+                    <a class="d-flex align-items-center justify-content-center rounded-circle bg-success bg-opacity-25 text-success fw-bold border border-success"
+                       href="#" role="button" data-bs-toggle="dropdown"
+                       style="width: 38px; height: 38px; font-size: 1rem; text-decoration: none;">
+                        {{ user.username|slice:":1"|upper }}
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><h6 class="dropdown-header">👤 {{ user.username }}</h6></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <form method="POST" action="{% url 'logout' %}" class="m-0">
+                                {% csrf_token %}
+                                <button type="submit" class="dropdown-item">🚪 Sair</button>
+                            </form>
+                        </li>
+                    </ul>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>

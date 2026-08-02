@@ -10,6 +10,7 @@ from decimal import Decimal
 
 from ..models import SavingsBox, SavingsBoxYieldEvent, Category, Transaction, Income, FixedExpense, SelfLoan
 from ..forms import SavingsBoxForm, SavingsBoxEditForm, SelfLoanForm
+from ._helpers import get_owned_or_404
 
 
 def _compute_windowed_yield(box, today):
@@ -33,13 +34,13 @@ def _compute_windowed_yield(box, today):
 
 
 def savings_boxes(request):
-    box_list = SavingsBox.objects.all()
+    box_list = SavingsBox.objects.for_user(request.user)
     total_saved = box_list.aggregate(Sum('current_balance'))['current_balance__sum'] or 0
 
     # Handles balance adjustment (mark-to-market)
     if request.method == 'POST' and 'atualizar_saldo' in request.POST:
         box_id = request.POST.get('caixinha_id')
-        box = SavingsBox.objects.get(id=box_id)
+        box = get_owned_or_404(request, SavingsBox, id=box_id)
 
         try:
             new_value = Decimal(request.POST.get('novo_valor', '').replace(',', '.'))
@@ -69,7 +70,9 @@ def savings_boxes(request):
 def new_savings_box(request):
     form = SavingsBoxForm(request.POST or None)
     if form.is_valid():
-        form.save()
+        box = form.save(commit=False)
+        box.owner = request.user
+        box.save()
         return redirect('caixinhas')
     return render(request, 'generic_form.html', {'form': form, 'title': '💰 Nova Caixinha'})
 
@@ -77,7 +80,7 @@ def new_savings_box(request):
 def edit_savings_box(request, id):
     """Allows changing a savings box's settings and goals (not its balance - that's
     handled separately by 'Atualizar valor hoje', which logs the change as yield)"""
-    box = get_object_or_404(SavingsBox, id=id)
+    box = get_owned_or_404(request, SavingsBox, id=id)
     # instance=box pre-fills the generic form with the existing data
     form = SavingsBoxEditForm(request.POST or None, instance=box)
 
@@ -93,13 +96,13 @@ def edit_savings_box(request, id):
 
 def delete_savings_box(request, id):
     """Permanently deletes the virtual savings box"""
-    box = get_object_or_404(SavingsBox, id=id)
+    box = get_owned_or_404(request, SavingsBox, id=id)
     box.delete()
     return redirect('caixinhas')
 
 
 def savings_box_detail(request, id):
-    box = get_object_or_404(SavingsBox, id=id)
+    box = get_owned_or_404(request, SavingsBox, id=id)
 
     # 1. Fetches every deposit/withdrawal linked to this box. Balance syncs ("Atualizar
     # valor hoje") are deliberately left out of this list - they're not a cash movement,
@@ -198,8 +201,8 @@ def savings_box_detail(request, id):
 
 def withdraw_savings_box(request):
     """Withdraws a partial or total amount from a chosen savings box and logs the transaction in the statement"""
-    box_list = SavingsBox.objects.all()
-    category_list = Category.objects.all()
+    box_list = SavingsBox.objects.for_user(request.user)
+    category_list = Category.objects.for_user(request.user)
 
     if request.method == 'POST':
         box_id = request.POST.get('caixinha_id')
@@ -207,8 +210,8 @@ def withdraw_savings_box(request):
         category_id = request.POST.get('categoria')
         reason_description = request.POST.get('descricao', '').strip()  # Reason for the withdrawal
 
-        box = get_object_or_404(SavingsBox, id=box_id)
-        category_obj = get_object_or_404(Category, id=category_id)
+        box = get_owned_or_404(request, SavingsBox, id=box_id)
+        category_obj = get_owned_or_404(request, Category, id=category_id)
 
         if withdraw_everything:
             withdrawal_amount = box.current_balance
@@ -227,10 +230,11 @@ def withdraw_savings_box(request):
         box.save()
 
         # 2. Logs the expense in the statement with a clear label
-        category_obj = Category.objects.filter(id=category_id).first() if category_id else None
+        category_obj = Category.objects.for_user(request.user).filter(id=category_id).first() if category_id else None
         final_description = f"Resgate: {reason_description}" if reason_description else f"Resgate da caixinha {box.name}"
 
         Transaction.objects.create(
+            owner=request.user,
             description=final_description,
             total_amount=withdrawal_amount,
             category=category_obj,
@@ -257,10 +261,11 @@ def new_self_loan(request):
     if box_id:
         initial_data['source_savings_box'] = box_id
 
-    form = SelfLoanForm(request.POST or None, initial=initial_data)
+    form = SelfLoanForm(request.POST or None, initial=initial_data, user=request.user)
 
     if form.is_valid():
         loan = form.save(commit=False)
+        loan.owner = request.user
         box = loan.source_savings_box
 
         # 1. Takes the money out of the box
@@ -272,6 +277,7 @@ def new_self_loan(request):
 
         # 2. Puts the money into the checking account (Income)
         Income.objects.create(
+            owner=request.user,
             description=f"Empréstimo da {box.name}",
             amount=loan.borrowed_amount,
             date=loan.start_date
@@ -282,6 +288,7 @@ def new_self_loan(request):
         loan.save()  # Saves the loan
 
         FixedExpense.objects.create(
+            owner=request.user,
             name=f"Pagamento Empréstimo ({box.name})",
             expected_amount=installment_amount,
             due_day=loan.start_date.day,

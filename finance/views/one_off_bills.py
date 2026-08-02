@@ -7,6 +7,7 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
 from ..models import Category, OneOffBill, Transaction
+from ._helpers import get_owned_or_404
 
 
 def add_one_off_bill(request):
@@ -23,7 +24,7 @@ def add_one_off_bill(request):
         # Fetches the category object from the DB
         category_obj = None
         if category_id:
-            category_obj = Category.objects.get(id=category_id)
+            category_obj = get_owned_or_404(request, Category, id=category_id)
 
         due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date()
 
@@ -42,6 +43,7 @@ def add_one_off_bill(request):
                 installment_title = f"{title} ({i+1}/{months_count})"
 
             OneOffBill.objects.create(
+                owner=request.user,
                 title=installment_title,
                 amount=amount,
                 due_date=installment_date,
@@ -55,10 +57,11 @@ def add_one_off_bill(request):
 
 
 def pay_one_off_bill(request, id):
-    bill = OneOffBill.objects.get(id=id)
+    bill = get_owned_or_404(request, OneOffBill, id=id)
 
     # Creates the transaction using the category already set on the one-off bill
     Transaction.objects.create(
+        owner=request.user,
         description=bill.title,
         total_amount=bill.amount,
         purchase_date=timezone.now().date(),
@@ -73,7 +76,7 @@ def pay_one_off_bill(request, id):
 
 
 def delete_one_off_bill(request, id):
-    bill = OneOffBill.objects.get(id=id)
+    bill = get_owned_or_404(request, OneOffBill, id=id)
 
     # Saves the date so we can redirect to the right month
     month = bill.due_date.month
@@ -85,7 +88,7 @@ def delete_one_off_bill(request, id):
 
 
 def edit_one_off_bill(request, id):
-    bill = OneOffBill.objects.get(id=id)
+    bill = get_owned_or_404(request, OneOffBill, id=id)
 
     if request.method == 'POST':
         original_due_date = bill.due_date
@@ -100,15 +103,17 @@ def edit_one_off_bill(request, id):
 
         category_id = request.POST.get('categoria_id')
         if category_id:
-            bill.category_id = category_id
+            bill.category = get_owned_or_404(request, Category, id=category_id)
 
         bill.save()
 
         # If this installment's value changed and it belongs to a parceled series, carries
         # the new value forward to the remaining unpaid installments from this date on
         if bill.installment_group and bill.amount != original_amount:
-            paid_bill_ids = Transaction.objects.filter(one_off_bill__isnull=False).values_list('one_off_bill_id', flat=True)
-            updated_count = OneOffBill.objects.filter(
+            paid_bill_ids = Transaction.objects.filter(
+                owner=request.user, one_off_bill__isnull=False
+            ).values_list('one_off_bill_id', flat=True)
+            updated_count = OneOffBill.objects.for_user(request.user).filter(
                 installment_group=bill.installment_group,
                 due_date__gte=original_due_date,
             ).exclude(id=bill.id).exclude(id__in=paid_bill_ids).update(amount=bill.amount)
@@ -117,7 +122,7 @@ def edit_one_off_bill(request, id):
                 messages.success(request, f"Valor atualizado! Também aplicado a mais {updated_count} parcela(s) futura(s).")
 
         # IF IT'S ALREADY PAID, UPDATES THE TRANSACTION TOO
-        txn = Transaction.objects.filter(one_off_bill=bill).first()
+        txn = Transaction.objects.filter(owner=request.user, one_off_bill=bill).first()
         if txn:
             txn.description = bill.title
             txn.total_amount = bill.amount

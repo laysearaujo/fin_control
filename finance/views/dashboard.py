@@ -8,6 +8,8 @@ from ..models import Transaction, Income, FixedExpense, FixedIncome, Installment
 
 
 def dashboard(request):
+    user = request.user
+
     # --- DATE RESOLUTION ---
     month_url = request.GET.get('mes')
     year_url = request.GET.get('ano')
@@ -48,38 +50,38 @@ def dashboard(request):
     # =========================================================================
 
     # A. Real balance TODAY
-    income_today = Income.objects.filter(date__lte=today).aggregate(Sum('amount'))['amount__sum'] or 0
-    expenses_today = Transaction.objects.filter(is_credit_card=False, is_internal_transfer=False, purchase_date__lte=today).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+    income_today = Income.objects.filter(owner=user, date__lte=today).aggregate(Sum('amount'))['amount__sum'] or 0
+    expenses_today = Transaction.objects.filter(owner=user, is_credit_card=False, is_internal_transfer=False, purchase_date__lte=today).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
     base_balance = income_today - expenses_today
 
     # B. Pending items for the current month
     # Fixed income
-    for fixed_income in FixedIncome.objects.all():
-        already_received = Income.objects.filter(fixed_income=fixed_income, date__month=today.month, date__year=today.year).exists()
+    for fixed_income in FixedIncome.objects.for_user(user):
+        already_received = Income.objects.filter(owner=user, fixed_income=fixed_income, date__month=today.month, date__year=today.year).exists()
         if not already_received:
             base_balance += fixed_income.amount
 
     # Bank fixed expenses
-    for expense in FixedExpense.objects.filter(is_credit_card=False):
-        paid = Transaction.objects.filter(fixed_expense=expense, purchase_date__month=today.month, purchase_date__year=today.year).exists()
+    for expense in FixedExpense.objects.filter(owner=user, is_credit_card=False):
+        paid = Transaction.objects.filter(owner=user, fixed_expense=expense, purchase_date__month=today.month, purchase_date__year=today.year).exists()
         if not paid:
             base_balance -= expense.expected_amount
 
     # One-off bills for the current month
-    bills_today = OneOffBill.objects.filter(due_date__month=today.month, due_date__year=today.year)
+    bills_today = OneOffBill.objects.filter(owner=user, due_date__month=today.month, due_date__year=today.year)
     for bill in bills_today:
-        paid = Transaction.objects.filter(one_off_bill=bill).exists()
+        paid = Transaction.objects.filter(owner=user, one_off_bill=bill).exists()
         if not paid:
             base_balance -= bill.amount
 
     # Current month's credit card invoices (checked per card - paying one doesn't pay them all)
-    for card in CreditCard.objects.all():
-        card_already_paid = Transaction.objects.filter(is_invoice_payment=True, invoice_month=today.month, invoice_year=today.year, credit_card=card).exists()
+    for card in CreditCard.objects.for_user(user):
+        card_already_paid = Transaction.objects.filter(owner=user, is_invoice_payment=True, invoice_month=today.month, invoice_year=today.year, credit_card=card).exists()
         if not card_already_paid:
-            installments_sum = Installment.objects.filter(transaction__credit_card=card, due_date__month=today.month, due_date__year=today.year).aggregate(Sum('amount'))['amount__sum'] or 0
+            installments_sum = Installment.objects.filter(transaction__owner=user, transaction__credit_card=card, due_date__month=today.month, due_date__year=today.year).aggregate(Sum('amount'))['amount__sum'] or 0
             subscriptions_sum = 0
-            for expense in FixedExpense.objects.filter(is_credit_card=True, credit_card=card):
-                if not Transaction.objects.filter(fixed_expense=expense, purchase_date__month=today.month, purchase_date__year=today.year).exists():
+            for expense in FixedExpense.objects.filter(owner=user, is_credit_card=True, credit_card=card):
+                if not Transaction.objects.filter(owner=user, fixed_expense=expense, purchase_date__month=today.month, purchase_date__year=today.year).exists():
                     subscriptions_sum += expense.expected_amount
             base_balance -= (installments_sum + subscriptions_sum)
 
@@ -93,17 +95,17 @@ def dashboard(request):
 
         while month_cursor < ref_date:
             # Income
-            month_income = FixedIncome.objects.aggregate(Sum('amount'))['amount__sum'] or 0
+            month_income = FixedIncome.objects.for_user(user).aggregate(Sum('amount'))['amount__sum'] or 0
 
             # Fixed expenses
-            month_bank_expenses = FixedExpense.objects.filter(is_credit_card=False).aggregate(Sum('expected_amount'))['expected_amount__sum'] or 0
+            month_bank_expenses = FixedExpense.objects.filter(owner=user, is_credit_card=False).aggregate(Sum('expected_amount'))['expected_amount__sum'] or 0
 
             # One-off bills for the intermediate month
-            month_bills = OneOffBill.objects.filter(due_date__month=month_cursor.month, due_date__year=month_cursor.year).aggregate(Sum('amount'))['amount__sum'] or 0
+            month_bills = OneOffBill.objects.filter(owner=user, due_date__month=month_cursor.month, due_date__year=month_cursor.year).aggregate(Sum('amount'))['amount__sum'] or 0
 
             # Estimated invoice
-            month_installments = Installment.objects.filter(due_date__month=month_cursor.month, due_date__year=month_cursor.year).aggregate(Sum('amount'))['amount__sum'] or 0
-            month_subscriptions = FixedExpense.objects.filter(is_credit_card=True).aggregate(Sum('expected_amount'))['expected_amount__sum'] or 0
+            month_installments = Installment.objects.filter(transaction__owner=user, due_date__month=month_cursor.month, due_date__year=month_cursor.year).aggregate(Sum('amount'))['amount__sum'] or 0
+            month_subscriptions = FixedExpense.objects.filter(owner=user, is_credit_card=True).aggregate(Sum('expected_amount'))['expected_amount__sum'] or 0
             month_invoice = month_installments + month_subscriptions
 
             # Net balance for the month (including one-off bills)
@@ -115,8 +117,8 @@ def dashboard(request):
         previous_balance = accumulated_balance
 
     else:
-        historical_income = Income.objects.filter(date__lt=ref_date).aggregate(Sum('amount'))['amount__sum'] or 0
-        historical_expenses = Transaction.objects.filter(is_credit_card=False, is_internal_transfer=False, purchase_date__lt=ref_date).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+        historical_income = Income.objects.filter(owner=user, date__lt=ref_date).aggregate(Sum('amount'))['amount__sum'] or 0
+        historical_expenses = Transaction.objects.filter(owner=user, is_credit_card=False, is_internal_transfer=False, purchase_date__lt=ref_date).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
         previous_balance = historical_income - historical_expenses
 
     # =========================================================================
@@ -127,11 +129,11 @@ def dashboard(request):
     next_invoice_month = ref_date + relativedelta(months=1)
     cards_invoice = []
 
-    for card in CreditCard.objects.all():
+    for card in CreditCard.objects.for_user(user):
         line_items = []
 
         card_installments = Installment.objects.filter(
-            transaction__credit_card=card, due_date__month=ref_date.month, due_date__year=ref_date.year
+            transaction__owner=user, transaction__credit_card=card, due_date__month=ref_date.month, due_date__year=ref_date.year
         ).select_related('transaction')
         installments_total = card_installments.aggregate(Sum('amount'))['amount__sum'] or 0
         for installment in card_installments:
@@ -140,25 +142,25 @@ def dashboard(request):
                 'amount': installment.amount, 'kind': 'purchase',
             })
 
-        card_fixed_expenses = FixedExpense.objects.filter(is_credit_card=True, credit_card=card)
+        card_fixed_expenses = FixedExpense.objects.filter(owner=user, is_credit_card=True, credit_card=card)
         subscriptions_total = 0
         for expense in card_fixed_expenses:
-            already_posted = Transaction.objects.filter(fixed_expense=expense, purchase_date__month=ref_date.month, purchase_date__year=ref_date.year).exists()
+            already_posted = Transaction.objects.filter(owner=user, fixed_expense=expense, purchase_date__month=ref_date.month, purchase_date__year=ref_date.year).exists()
             if not already_posted:
                 subscriptions_total += expense.expected_amount
                 line_items.append({'description': f"{expense.name} (Assinatura)", 'amount': expense.expected_amount, 'kind': 'fixed'})
 
         card_total = installments_total + subscriptions_total
-        card_paid = Transaction.objects.filter(is_invoice_payment=True, invoice_month=ref_date.month, invoice_year=ref_date.year, credit_card=card).exists()
+        card_paid = Transaction.objects.filter(owner=user, is_invoice_payment=True, invoice_month=ref_date.month, invoice_year=ref_date.year, credit_card=card).exists()
 
         # What's already accumulating for NEXT month's invoice (installments already scheduled +
         # subscriptions not yet posted), so purchases made today don't sneak up unnoticed
         next_installments_total = Installment.objects.filter(
-            transaction__credit_card=card, due_date__month=next_invoice_month.month, due_date__year=next_invoice_month.year
+            transaction__owner=user, transaction__credit_card=card, due_date__month=next_invoice_month.month, due_date__year=next_invoice_month.year
         ).aggregate(Sum('amount'))['amount__sum'] or 0
         next_subscriptions_total = 0
         for expense in card_fixed_expenses:
-            already_posted_next = Transaction.objects.filter(fixed_expense=expense, purchase_date__month=next_invoice_month.month, purchase_date__year=next_invoice_month.year).exists()
+            already_posted_next = Transaction.objects.filter(owner=user, fixed_expense=expense, purchase_date__month=next_invoice_month.month, purchase_date__year=next_invoice_month.year).exists()
             if not already_posted_next:
                 next_subscriptions_total += expense.expected_amount
         card_next_total = next_installments_total + next_subscriptions_total
@@ -183,14 +185,14 @@ def dashboard(request):
     cards_total_count = len(active_cards)
 
     # The base forecast is just your fixed salary
-    total_fixed_income = FixedIncome.objects.aggregate(Sum('amount'))['amount__sum'] or 0
+    total_fixed_income = FixedIncome.objects.for_user(user).aggregate(Sum('amount'))['amount__sum'] or 0
     forecast_total_income = total_fixed_income
 
     # 1. Actual income (only what was really received and saved to the DB)
-    month_actual_income = Income.objects.filter(date__month=ref_date.month, date__year=ref_date.year).aggregate(Sum('amount'))['amount__sum'] or 0
+    month_actual_income = Income.objects.filter(owner=user, date__month=ref_date.month, date__year=ref_date.year).aggregate(Sum('amount'))['amount__sum'] or 0
 
     # 2. Actual outflows
-    month_actual_expenses = Transaction.objects.filter(is_credit_card=False, is_internal_transfer=False, purchase_date__month=ref_date.month, purchase_date__year=ref_date.year).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+    month_actual_expenses = Transaction.objects.filter(owner=user, is_credit_card=False, is_internal_transfer=False, purchase_date__month=ref_date.month, purchase_date__year=ref_date.year).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
 
     # Adjusts the forecast in case you got extra money this month (beyond the fixed income)
     income_still_expected = forecast_total_income - month_actual_income
@@ -212,8 +214,8 @@ def dashboard(request):
 
     # A. Fixed expenses (credit card subscriptions are left out - they already show up in
     # the "Fatura do Cartão" card, no need to duplicate them here)
-    for expense in FixedExpense.objects.filter(is_credit_card=False):
-        payment = Transaction.objects.filter(fixed_expense=expense, purchase_date__month=ref_date.month, purchase_date__year=ref_date.year).first()
+    for expense in FixedExpense.objects.filter(owner=user, is_credit_card=False):
+        payment = Transaction.objects.filter(owner=user, fixed_expense=expense, purchase_date__month=ref_date.month, purchase_date__year=ref_date.year).first()
         status = 'paid' if payment else 'pending'
         amount_paid = payment.total_amount if payment else 0
         if status == 'pending':
@@ -229,9 +231,9 @@ def dashboard(request):
         })
 
     # B. One-off bills (only this month's)
-    month_bills_screen = OneOffBill.objects.filter(due_date__month=ref_date.month, due_date__year=ref_date.year)
+    month_bills_screen = OneOffBill.objects.filter(owner=user, due_date__month=ref_date.month, due_date__year=ref_date.year)
     for bill in month_bills_screen:
-        payment = Transaction.objects.filter(one_off_bill=bill).first()
+        payment = Transaction.objects.filter(owner=user, one_off_bill=bill).first()
         status = 'paid' if payment else 'pending'
 
         if status == 'pending':
@@ -267,8 +269,8 @@ def dashboard(request):
 
     # Last 5 movements of the month being viewed (income + expenses combined), so you can
     # glance at the dashboard and immediately see what happened in that month
-    recent_income = Income.objects.filter(date__month=ref_date.month, date__year=ref_date.year).order_by('-date', '-id')[:5]
-    recent_expenses = Transaction.objects.filter(purchase_date__month=ref_date.month, purchase_date__year=ref_date.year).order_by('-purchase_date', '-id')[:5]
+    recent_income = Income.objects.filter(owner=user, date__month=ref_date.month, date__year=ref_date.year).order_by('-date', '-id')[:5]
+    recent_expenses = Transaction.objects.filter(owner=user, purchase_date__month=ref_date.month, purchase_date__year=ref_date.year).order_by('-purchase_date', '-id')[:5]
 
     recent_movements = []
     for income in recent_income:
@@ -315,7 +317,7 @@ def dashboard(request):
         'cards_total_count': cards_total_count,
         'invoice_paid': all_invoices_paid,
         'next_invoice_total': next_invoice_total,
-        'total_invested': SavingsBox.objects.aggregate(Sum('current_balance'))['current_balance__sum'] or 0,
-        'categories': Category.objects.all(),
+        'total_invested': SavingsBox.objects.for_user(user).aggregate(Sum('current_balance'))['current_balance__sum'] or 0,
+        'categories': Category.objects.for_user(user),
     }
     return render(request, 'dashboard.html', context)

@@ -1,25 +1,28 @@
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import render, redirect
 
 from ..models import FixedIncome, Income
 from ..forms import FixedIncomeForm, IncomeForm
+from ._helpers import get_owned_or_404
 
 
 def manage_fixed_incomes(request):
-    incomes = FixedIncome.objects.all()
+    incomes = FixedIncome.objects.for_user(request.user)
     return render(request, 'fixed_incomes_list.html', {'incomes': incomes})
 
 
 def new_fixed_income(request):
     form = FixedIncomeForm(request.POST or None)
     if form.is_valid():
-        form.save()
+        fixed_income = form.save(commit=False)
+        fixed_income.owner = request.user
+        fixed_income.save()
         return redirect('gerenciar_receitas_fixas')
     return render(request, 'generic_form.html', {'form': form, 'title': '💰 Novo Salário Fixo'})
 
 
 def edit_fixed_income(request, id):
     # Fetches the fixed income by ID
-    income = get_object_or_404(FixedIncome, id=id)
+    income = get_owned_or_404(request, FixedIncome, id=id)
 
     # Loads the form already pre-filled with the data (instance=income)
     form = FixedIncomeForm(request.POST or None, instance=income)
@@ -37,7 +40,7 @@ def edit_fixed_income(request, id):
 
 def edit_income(request, id):
     # Fetches the income entry by ID
-    income = get_object_or_404(Income, id=id)
+    income = get_owned_or_404(request, Income, id=id)
     form = IncomeForm(request.POST or None, instance=income)
 
     if form.is_valid():
@@ -53,12 +56,12 @@ def edit_income(request, id):
 
 
 def delete_fixed_income(request, id):
-    item = get_object_or_404(FixedIncome, id=id)
+    item = get_owned_or_404(request, FixedIncome, id=id)
     item.delete()
     return redirect('gerenciar_receitas_fixas')
 
 
 def delete_income(request, id):
-    income = Income.objects.get(id=id)
+    income = get_owned_or_404(request, Income, id=id)
     income.delete()
     return redirect(request.META.get('HTTP_REFERER', '/'))

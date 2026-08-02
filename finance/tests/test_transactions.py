@@ -5,31 +5,31 @@ edit), and receiving income while the real balance is negative must auto-create 
 """
 from datetime import date
 
-from django.test import TestCase, Client
 from django.utils import timezone
 
+from .helpers import AuthenticatedTestCase
 from ..models import Category, CreditCard, SavingsBox, Transaction, Income, Installment
 
 
-class StatementCreditCardTotalsTests(TestCase):
+class StatementCreditCardTotalsTests(AuthenticatedTestCase):
     """A parceled credit-card purchase's Transaction.total_amount is the FULL price
     (e.g. R$7880 for a 7x purchase), not what actually left the account that month -
     only the Installment amounts (already counted elsewhere via compute_month_data) do
     that. Counting the raw total here overstated the purchase month's spend."""
 
     def setUp(self):
-        self.client = Client()
-        self.category = Category.objects.create(name='Viagens')
-        self.card = CreditCard.objects.create(name='Cartão', limit=10000, closing_day=28, due_day=10)
+        super().setUp()
+        self.category = Category.objects.create(owner=self.user, name='Viagens')
+        self.card = CreditCard.objects.create(owner=self.user, name='Cartão', limit=10000, closing_day=28, due_day=10)
         self.today = timezone.now().date()
 
     def test_installment_purchase_total_amount_excluded_from_month_total_expense(self):
         Transaction.objects.create(
-            description='Passagem', total_amount=7880.67, purchase_date=self.today,
+            owner=self.user, description='Passagem', total_amount=7880.67, purchase_date=self.today,
             category=self.category, is_credit_card=True, credit_card=self.card, installments_count=7,
         )
         Transaction.objects.create(
-            description='Mercado', total_amount=100, purchase_date=self.today,
+            owner=self.user, description='Mercado', total_amount=100, purchase_date=self.today,
             category=self.category, is_credit_card=False,
         )
 
@@ -40,7 +40,7 @@ class StatementCreditCardTotalsTests(TestCase):
 
     def test_installment_purchase_still_appears_in_the_items_list(self):
         txn = Transaction.objects.create(
-            description='Passagem', total_amount=7880.67, purchase_date=self.today,
+            owner=self.user, description='Passagem', total_amount=7880.67, purchase_date=self.today,
             category=self.category, is_credit_card=True, credit_card=self.card, installments_count=7,
         )
 
@@ -53,7 +53,7 @@ class StatementCreditCardTotalsTests(TestCase):
 
     def test_non_installment_credit_card_purchase_also_excluded_from_total(self):
         Transaction.objects.create(
-            description='Compra à vista no cartão', total_amount=200, purchase_date=self.today,
+            owner=self.user, description='Compra à vista no cartão', total_amount=200, purchase_date=self.today,
             category=self.category, is_credit_card=True, credit_card=self.card, installments_count=1,
         )
 
@@ -63,12 +63,12 @@ class StatementCreditCardTotalsTests(TestCase):
         self.assertEqual(group['total_expense'], 0)
 
 
-class SavingsBoxEffectOnEditDeleteTests(TestCase):
+class SavingsBoxEffectOnEditDeleteTests(AuthenticatedTestCase):
     def setUp(self):
-        self.client = Client()
-        self.reverse_category = Category.objects.create(name='Aporte Reserva', reverse_logic=True)
-        self.normal_category = Category.objects.create(name='Lazer')
-        self.box = SavingsBox.objects.create(name='Caixinha', current_balance=1000)
+        super().setUp()
+        self.reverse_category = Category.objects.create(owner=self.user, name='Aporte Reserva', reverse_logic=True)
+        self.normal_category = Category.objects.create(owner=self.user, name='Lazer')
+        self.box = SavingsBox.objects.create(owner=self.user, name='Caixinha', current_balance=1000)
         self.today = timezone.now().date()
 
     def _create_aporte(self, amount):
@@ -127,7 +127,7 @@ class SavingsBoxEffectOnEditDeleteTests(TestCase):
         self.assertEqual(self.box.current_balance, 1000)
 
     def test_unchecking_credit_card_on_edit_deletes_orphaned_installments(self):
-        card = CreditCard.objects.create(name='Cartão', limit=1000, closing_day=28, due_day=10)
+        card = CreditCard.objects.create(owner=self.user, name='Cartão', limit=1000, closing_day=28, due_day=10)
         self.client.post('/despesa/nova/', {
             'description': 'Compra Cartão', 'total_amount': '90', 'category': self.normal_category.id,
             'is_credit_card': 'on', 'credit_card': card.id, 'installments_count': '3',
@@ -143,18 +143,18 @@ class SavingsBoxEffectOnEditDeleteTests(TestCase):
         self.assertEqual(Installment.objects.filter(transaction=txn).count(), 0)
 
 
-class OverdraftPaymentTests(TestCase):
+class OverdraftPaymentTests(AuthenticatedTestCase):
     """A deficit is "real balance so far < 0". Receiving income while one exists
     must label part of that income as paying it off, without ever creating more
     labels than the deficit actually calls for."""
 
     def setUp(self):
-        self.client = Client()
-        self.category = Category.objects.create(name='Lazer')
+        super().setUp()
+        self.category = Category.objects.create(owner=self.user, name='Lazer')
 
     def _force_deficit(self, amount, on_date):
         Transaction.objects.create(
-            description='Gasto Grande', total_amount=amount, purchase_date=on_date,
+            owner=self.user, description='Gasto Grande', total_amount=amount, purchase_date=on_date,
             category=self.category, is_credit_card=False,
         )
 
@@ -194,7 +194,7 @@ class OverdraftPaymentTests(TestCase):
         self.assertEqual(list(payments.values_list('total_amount', flat=True)), [200, 100])
 
     def test_no_deficit_creates_no_overdraft_payment(self):
-        Income.objects.create(description='Salário', amount=1000, date=date(2031, 1, 1))
+        Income.objects.create(owner=self.user, description='Salário', amount=1000, date=date(2031, 1, 1))
         self.client.post('/receita/nova/', {
             'description': 'Salário 2', 'amount': '500', 'date': '2031-02-01',
         })

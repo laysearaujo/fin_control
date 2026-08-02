@@ -8,42 +8,42 @@ be computed independently of every other card.
 """
 from datetime import date
 
-from django.test import TestCase, Client
 from django.utils import timezone
 
+from .helpers import AuthenticatedTestCase
 from ..models import Category, CreditCard, SavingsBox, FixedExpense, Transaction, Income, Installment
 
 
-class CheckingBalanceTests(TestCase):
+class CheckingBalanceTests(AuthenticatedTestCase):
     def setUp(self):
-        self.client = Client()
-        self.category = Category.objects.create(name='Mercado')
-        self.reverse_category = Category.objects.create(name='Reserva', reverse_logic=True)
-        self.box = SavingsBox.objects.create(name='Caixinha Teste', current_balance=0)
+        super().setUp()
+        self.category = Category.objects.create(owner=self.user, name='Mercado')
+        self.reverse_category = Category.objects.create(owner=self.user, name='Reserva', reverse_logic=True)
+        self.box = SavingsBox.objects.create(owner=self.user, name='Caixinha Teste', current_balance=0)
         self.today = timezone.now().date()
 
     def test_resgate_does_not_reduce_checking_balance(self):
-        Income.objects.create(description='Salário', amount=1000, date=self.today)
+        Income.objects.create(owner=self.user, description='Salário', amount=1000, date=self.today)
         Transaction.objects.create(
-            description='Resgate', total_amount=200, purchase_date=self.today,
+            owner=self.user, description='Resgate', total_amount=200, purchase_date=self.today,
             source_savings_box=self.box, is_internal_transfer=True, is_credit_card=False,
         )
         response = self.client.get('/')
         self.assertEqual(response.context['current_balance'], 1000)
 
     def test_aporte_reduces_checking_balance_like_a_normal_expense(self):
-        Income.objects.create(description='Salário', amount=1000, date=self.today)
+        Income.objects.create(owner=self.user, description='Salário', amount=1000, date=self.today)
         Transaction.objects.create(
-            description='Aporte', total_amount=300, purchase_date=self.today,
+            owner=self.user, description='Aporte', total_amount=300, purchase_date=self.today,
             target_savings_box=self.box, category=self.reverse_category, is_credit_card=False,
         )
         response = self.client.get('/')
         self.assertEqual(response.context['current_balance'], 700)
 
     def test_normal_expense_reduces_checking_balance(self):
-        Income.objects.create(description='Salário', amount=1000, date=self.today)
+        Income.objects.create(owner=self.user, description='Salário', amount=1000, date=self.today)
         Transaction.objects.create(
-            description='Mercado', total_amount=150, purchase_date=self.today,
+            owner=self.user, description='Mercado', total_amount=150, purchase_date=self.today,
             category=self.category, is_credit_card=False,
         )
         response = self.client.get('/')
@@ -51,32 +51,32 @@ class CheckingBalanceTests(TestCase):
 
     def test_credit_card_purchase_does_not_reduce_checking_balance_directly(self):
         # Credit card spend only hits checking when the invoice is paid, not at purchase time
-        card = CreditCard.objects.create(name='Cartão', limit=1000, closing_day=28, due_day=10)
-        Income.objects.create(description='Salário', amount=1000, date=self.today)
+        card = CreditCard.objects.create(owner=self.user, name='Cartão', limit=1000, closing_day=28, due_day=10)
+        Income.objects.create(owner=self.user, description='Salário', amount=1000, date=self.today)
         Transaction.objects.create(
-            description='Compra no cartão', total_amount=300, purchase_date=self.today,
+            owner=self.user, description='Compra no cartão', total_amount=300, purchase_date=self.today,
             category=self.category, is_credit_card=True, credit_card=card, installments_count=1,
         )
         response = self.client.get('/')
         self.assertEqual(response.context['current_balance'], 1000)
 
 
-class MultiCardInvoiceTests(TestCase):
+class MultiCardInvoiceTests(AuthenticatedTestCase):
     """Each card's invoice (total, paid status, next-month accumulation) must be
     computed independently - paying card A must never mark card B as paid."""
 
     def setUp(self):
-        self.client = Client()
-        self.category = Category.objects.create(name='Compras')
-        self.card_a = CreditCard.objects.create(name='Cartão A', limit=1000, closing_day=28, due_day=10)
-        self.card_b = CreditCard.objects.create(name='Cartão B', limit=1000, closing_day=28, due_day=10)
+        super().setUp()
+        self.category = Category.objects.create(owner=self.user, name='Compras')
+        self.card_a = CreditCard.objects.create(owner=self.user, name='Cartão A', limit=1000, closing_day=28, due_day=10)
+        self.card_b = CreditCard.objects.create(owner=self.user, name='Cartão B', limit=1000, closing_day=28, due_day=10)
         today = timezone.now().date()
         # Day 1 is always before closing_day=28, so the installment lands in this same month
         self.month_start = date(today.year, today.month, 1)
 
     def _purchase(self, card, amount, description):
         return Transaction.objects.create(
-            description=description, total_amount=amount, purchase_date=self.month_start,
+            owner=self.user, description=description, total_amount=amount, purchase_date=self.month_start,
             category=self.category, is_credit_card=True, credit_card=card, installments_count=1,
         )
 
@@ -111,20 +111,20 @@ class MultiCardInvoiceTests(TestCase):
         self.assertEqual(payments.first().credit_card_id, self.card_a.id)
 
 
-class CreditCardSubscriptionBillListTests(TestCase):
+class CreditCardSubscriptionBillListTests(AuthenticatedTestCase):
     """Credit-card FixedExpense subscriptions must never show up as a separate
     pending item in "Contas do Mês" - they're settled via the invoice lump sum, so
     listing them individually would mean they're perpetually (and wrongly) "pending"."""
 
     def setUp(self):
-        self.client = Client()
-        card = CreditCard.objects.create(name='Cartão', limit=1000, closing_day=28, due_day=10)
+        super().setUp()
+        card = CreditCard.objects.create(owner=self.user, name='Cartão', limit=1000, closing_day=28, due_day=10)
         self.subscription = FixedExpense.objects.create(
-            name='Netflix', expected_amount=39.90, due_day=10,
+            owner=self.user, name='Netflix', expected_amount=39.90, due_day=10,
             is_credit_card=True, credit_card=card,
         )
         self.bank_bill = FixedExpense.objects.create(
-            name='Aluguel', expected_amount=1500, due_day=5, is_credit_card=False,
+            owner=self.user, name='Aluguel', expected_amount=1500, due_day=5, is_credit_card=False,
         )
 
     def test_credit_card_subscription_excluded_from_fixed_items(self):

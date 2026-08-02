@@ -1,4 +1,4 @@
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render
 from django.db.models import Sum, Q
 from django.utils import timezone
 from datetime import date
@@ -6,6 +6,7 @@ from dateutil.relativedelta import relativedelta
 
 from ..models import Category, FixedIncome, FixedExpense, Transaction, Installment, Income, SavingsBox, OneOffBill
 from .categories import _count_pending_categorization
+from ._helpers import get_owned_or_404
 
 # Python's strftime('%B')/('%b') depends on the OS locale being installed, which isn't reliable
 # in every environment — so month names are spelled out by hand instead.
@@ -19,7 +20,7 @@ MESES_PT_ABREV = {
 }
 
 
-def compute_month_data(m, y):
+def compute_month_data(user, m, y):
     """Computes a single month's total spend, deposits and actual cost of living.
 
     Shared by category_report (3-month traffic light) and annual_report (12-month grid) so
@@ -27,26 +28,26 @@ def compute_month_data(m, y):
     """
     # Checks whether the month has any real activity (debit or card)
     has_real_activity = Transaction.objects.filter(
-        purchase_date__month=m, purchase_date__year=y
+        owner=user, purchase_date__month=m, purchase_date__year=y
     ).exists() or Installment.objects.filter(
-        due_date__month=m, due_date__year=y
+        transaction__owner=user, due_date__month=m, due_date__year=y
     ).exists()
 
     # Includes savings-box withdrawals: that money was genuinely spent on something real,
     # it just came from a caixinha instead of the checking account (only the Dashboard's
     # balance calculation needs to ignore it, not the spend-by-category analysis here)
     debit_total = Transaction.objects.filter(
-        is_credit_card=False, is_invoice_payment=False, purchase_date__month=m, purchase_date__year=y
+        owner=user, is_credit_card=False, is_invoice_payment=False, purchase_date__month=m, purchase_date__year=y
     ).aggregate(t=Sum('total_amount'))['t'] or 0.0
 
     installments_total = Installment.objects.filter(
-        due_date__month=m, due_date__year=y
+        transaction__owner=user, due_date__month=m, due_date__year=y
     ).aggregate(t=Sum('amount'))['t'] or 0.0
 
     # ONLY adds fixed expenses if the month has real activity!
     # This prevents subscriptions from leaking into past months where the app wasn't in use yet.
     if has_real_activity:
-        fixed_total = FixedExpense.objects.filter(is_credit_card=True).aggregate(t=Sum('expected_amount'))['t'] or 0.0
+        fixed_total = FixedExpense.objects.filter(owner=user, is_credit_card=True).aggregate(t=Sum('expected_amount'))['t'] or 0.0
     else:
         fixed_total = 0.0
 
@@ -56,14 +57,14 @@ def compute_month_data(m, y):
     deposits = 0.0
     if has_real_activity:
         debit_entries = Transaction.objects.filter(
-            is_credit_card=False, is_invoice_payment=False, purchase_date__month=m, purchase_date__year=y
+            owner=user, is_credit_card=False, is_invoice_payment=False, purchase_date__month=m, purchase_date__year=y
         ).select_related('category')
 
         installment_entries = Installment.objects.filter(
-            due_date__month=m, due_date__year=y
+            transaction__owner=user, due_date__month=m, due_date__year=y
         ).select_related('transaction__category')
 
-        fixed_entries = FixedExpense.objects.filter(is_credit_card=True).select_related('category')
+        fixed_entries = FixedExpense.objects.filter(owner=user, is_credit_card=True).select_related('category')
 
         for entry in debit_entries:
             if entry.category and entry.category.reverse_logic:
@@ -91,17 +92,17 @@ def _month_status(month_income, month_total, leftover):
     return "Saudável 🎯", "text-success fw-bold"
 
 
-def _checking_balance_before(cutoff_date):
+def _checking_balance_before(user, cutoff_date):
     """Real checking-account balance carried over from before cutoff_date (same accounting
     rule as the Dashboard: a savings-box withdrawal doesn't move this balance)."""
-    income_before = Income.objects.filter(date__lt=cutoff_date).aggregate(Sum('amount'))['amount__sum'] or 0
+    income_before = Income.objects.filter(owner=user, date__lt=cutoff_date).aggregate(Sum('amount'))['amount__sum'] or 0
     expenses_before = Transaction.objects.filter(
-        is_credit_card=False, is_internal_transfer=False, purchase_date__lt=cutoff_date
+        owner=user, is_credit_card=False, is_internal_transfer=False, purchase_date__lt=cutoff_date
     ).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
     return float(income_before) - float(expenses_before)
 
 
-def _build_month_rows(months, starting_balance, today, total_recurring_fixed_income):
+def _build_month_rows(user, months, starting_balance, today, total_recurring_fixed_income):
     """Builds one row per (month, year) in `months`, carrying the running balance across them
     in order so "saldo anterior + entradas - custo real - aportes = saldo final" always holds.
     Shared by the 3-month traffic light (category_report) and the 12-month grid (annual_report)
@@ -111,7 +112,7 @@ def _build_month_rows(months, starting_balance, today, total_recurring_fixed_inc
     running_balance = starting_balance
 
     for month_ref in months:
-        month_total, month_deposits, month_cost = compute_month_data(month_ref.month, month_ref.year)
+        month_total, month_deposits, month_cost = compute_month_data(user, month_ref.month, month_ref.year)
 
         is_current_or_future_month = month_ref.year > today.year or (month_ref.year == today.year and month_ref.month >= today.month)
 
@@ -119,10 +120,10 @@ def _build_month_rows(months, starting_balance, today, total_recurring_fixed_inc
         # posted yet (e.g. the recurring R$2000 aporte due on day 5) - same idea as the
         # income forecast right below, and matches the Dashboard's own balance projection.
         if is_current_or_future_month:
-            bank_fixed_expenses = FixedExpense.objects.filter(is_credit_card=False).select_related('category')
+            bank_fixed_expenses = FixedExpense.objects.filter(owner=user, is_credit_card=False).select_related('category')
             for expense in bank_fixed_expenses:
                 already_paid = Transaction.objects.filter(
-                    fixed_expense=expense, purchase_date__month=month_ref.month, purchase_date__year=month_ref.year
+                    owner=user, fixed_expense=expense, purchase_date__month=month_ref.month, purchase_date__year=month_ref.year
                 ).exists()
                 if not already_paid:
                     amount = float(expense.expected_amount)
@@ -131,7 +132,7 @@ def _build_month_rows(months, starting_balance, today, total_recurring_fixed_inc
                         month_deposits += amount
             month_cost = month_total - month_deposits
 
-        posted_total = Income.objects.filter(date__month=month_ref.month, date__year=month_ref.year).aggregate(t=Sum('amount'))['t'] or 0.0
+        posted_total = Income.objects.filter(owner=user, date__month=month_ref.month, date__year=month_ref.year).aggregate(t=Sum('amount'))['t'] or 0.0
         month_income = float(posted_total)
 
         # If it's the current month or a future one and nothing's posted yet, assumes the
@@ -152,7 +153,7 @@ def _build_month_rows(months, starting_balance, today, total_recurring_fixed_inc
         # what the account really has. We back it out so "saldo anterior + entradas - custo
         # real - aportes = saldo final" reconciles to the real, verifiable account balance.
         month_resgates = float(Transaction.objects.filter(
-            is_internal_transfer=True, purchase_date__month=month_ref.month, purchase_date__year=month_ref.year
+            owner=user, is_internal_transfer=True, purchase_date__month=month_ref.month, purchase_date__year=month_ref.year
         ).aggregate(Sum('total_amount'))['total_amount__sum'] or 0)
         balance_cost = month_cost - month_resgates
 
@@ -208,14 +209,14 @@ def category_report(request):
     # 2. SELECTED MONTH'S DATA (PIE CHART AND DEPOSITS)
     # ==========================================
     debit_expenses = Transaction.objects.filter(
-        is_credit_card=False, is_invoice_payment=False, purchase_date__month=month, purchase_date__year=year
+        owner=request.user, is_credit_card=False, is_invoice_payment=False, purchase_date__month=month, purchase_date__year=year
     ).values('category__id', 'category__name', 'category__reverse_logic').annotate(total=Sum('total_amount'))
 
     installments = Installment.objects.filter(
-        due_date__month=month, due_date__year=year
+        transaction__owner=request.user, due_date__month=month, due_date__year=year
     ).select_related('transaction__category')
 
-    card_fixed_expenses = FixedExpense.objects.filter(is_credit_card=True).select_related('category')
+    card_fixed_expenses = FixedExpense.objects.filter(owner=request.user, is_credit_card=True).select_related('category')
 
     NO_CATEGORY_LABEL = 'Sem Categoria'
     totals_by_category = {}
@@ -239,10 +240,10 @@ def category_report(request):
         totals_by_category[name][0] += float(expense.expected_amount or 0)
 
     # Splits pure expenses from investments for the two pie charts
-    month_grand_total, month_deposits_total, month_actual_cost = compute_month_data(month, year)
+    month_grand_total, month_deposits_total, month_actual_cost = compute_month_data(request.user, month, year)
 
     # How much of what you received this month went into deposits/savings
-    month_income_total = float(Income.objects.filter(date__month=month, date__year=year).aggregate(Sum('amount'))['amount__sum'] or 0)
+    month_income_total = float(Income.objects.filter(owner=request.user, date__month=month, date__year=year).aggregate(Sum('amount'))['amount__sum'] or 0)
     deposits_pct_of_income = (month_deposits_total / month_income_total * 100) if month_income_total > 0 else 0
 
     # Sorts the dict by value descending so the side list looks nice
@@ -278,15 +279,15 @@ def category_report(request):
     # Checking-account balance carried over from before the 6-month window starts, so the first
     # month's "available income" already accounts for what was left over from earlier months
     window_start_date = ref_date - relativedelta(months=5)
-    running_checking_balance = float(Income.objects.filter(date__lt=window_start_date).aggregate(Sum('amount'))['amount__sum'] or 0) - float(
-        Transaction.objects.filter(is_credit_card=False, is_internal_transfer=False, purchase_date__lt=window_start_date).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+    running_checking_balance = float(Income.objects.filter(owner=request.user, date__lt=window_start_date).aggregate(Sum('amount'))['amount__sum'] or 0) - float(
+        Transaction.objects.filter(owner=request.user, is_credit_card=False, is_internal_transfer=False, purchase_date__lt=window_start_date).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
     )
 
     for i in range(5, -1, -1):
         month_date = ref_date - relativedelta(months=i)
         history_labels.append(f"{MESES_PT_ABREV[month_date.month]}/{month_date.strftime('%y')}")
 
-        month_grand_total_i, _, month_actual_cost_i = compute_month_data(month_date.month, month_date.year)
+        month_grand_total_i, _, month_actual_cost_i = compute_month_data(request.user, month_date.month, month_date.year)
 
         # The current calendar month is still in progress - averaging it in as if it were a
         # complete month would understate the real cost of living (e.g. viewing this on day 1
@@ -299,7 +300,7 @@ def category_report(request):
             sum_real_cost_history += month_actual_cost_i
 
         total_income_i = Income.objects.filter(
-            date__month=month_date.month, date__year=month_date.year
+            owner=request.user, date__month=month_date.month, date__year=month_date.year
         ).aggregate(total=Sum('amount'))['total'] or 0.0
 
         # "Available this month" = what was left over from the previous month + what came in now —
@@ -310,7 +311,7 @@ def category_report(request):
         # Rolls the checking balance forward for next month's carryover (excludes savings-box
         # withdrawals, same rule as the Dashboard: a resgate doesn't move the checking balance)
         month_checking_expense_i = float(Transaction.objects.filter(
-            is_credit_card=False, is_internal_transfer=False, purchase_date__month=month_date.month, purchase_date__year=month_date.year
+            owner=request.user, is_credit_card=False, is_internal_transfer=False, purchase_date__month=month_date.month, purchase_date__year=month_date.year
         ).aggregate(Sum('total_amount'))['total_amount__sum'] or 0)
         running_checking_balance = available_income_i - month_checking_expense_i
 
@@ -327,9 +328,9 @@ def category_report(request):
     # Builds the wealth (patrimônio) timeline event by event (not smoothed by month), so the
     # line actually rises on each deposit and drops on each withdrawal. Anchored on today's real
     # total and walked backwards so the last point always matches the current balance exactly.
-    current_total_wealth = float(SavingsBox.objects.aggregate(Sum('current_balance'))['current_balance__sum'] or 0)
+    current_total_wealth = float(SavingsBox.objects.for_user(request.user).aggregate(Sum('current_balance'))['current_balance__sum'] or 0)
     wealth_movements = Transaction.objects.filter(
-        Q(target_savings_box__isnull=False) | Q(source_savings_box__isnull=False)
+        Q(owner=request.user), Q(target_savings_box__isnull=False) | Q(source_savings_box__isnull=False)
     ).order_by('purchase_date', 'id')
 
     net_total_movements = 0.0
@@ -356,7 +357,7 @@ def category_report(request):
     ideal_reserve = average_living_cost * 6
 
     # Looks up whichever savings box the user marked as their emergency reserve
-    emergency_box = SavingsBox.objects.filter(is_emergency_reserve=True).first()
+    emergency_box = SavingsBox.objects.for_user(request.user).filter(is_emergency_reserve=True).first()
 
     # If the box exists, grabs its balance. If not (or it's empty), assumes 0.0
     real_reserve_balance = float(emergency_box.current_balance) if emergency_box else 0.0
@@ -374,12 +375,12 @@ def category_report(request):
     ]
 
     # Fetches the total fixed income registered in the system to use as a forecast
-    total_recurring_fixed_income = float(FixedIncome.objects.aggregate(t=Sum('amount'))['t'] or 0.0)
+    total_recurring_fixed_income = float(FixedIncome.objects.for_user(request.user).aggregate(t=Sum('amount'))['t'] or 0.0)
 
     # Same shared month-by-month builder the 12-month Visão Anual uses, carrying the running
     # balance from before the "previous month" so the numbers always reconcile between screens
-    starting_balance = _checking_balance_before(date(traffic_light_months[0].year, traffic_light_months[0].month, 1))
-    month_rows = _build_month_rows(traffic_light_months, starting_balance, today, total_recurring_fixed_income)
+    starting_balance = _checking_balance_before(request.user, date(traffic_light_months[0].year, traffic_light_months[0].month, 1))
+    month_rows = _build_month_rows(request.user, traffic_light_months, starting_balance, today, total_recurring_fixed_income)
 
     traffic_light_data = []
     for row in month_rows:
@@ -402,17 +403,17 @@ def category_report(request):
 
     # Quick budget-planning summary card (mirrors manage_categories's totals for this month,
     # so the numbers always match the full Planejamento screen)
-    total_planned = Category.objects.aggregate(Sum('monthly_cap'))['monthly_cap__sum'] or 0
+    total_planned = Category.objects.for_user(request.user).aggregate(Sum('monthly_cap'))['monthly_cap__sum'] or 0
     # Excludes is_invoice_payment=True: that's just the lump-sum settlement of the card charges
     # already counted below via installments/card-fixed-expenses — counting both double-counts it
     planned_debit_spend = Transaction.objects.filter(
-        is_credit_card=False, is_invoice_payment=False, purchase_date__month=month, purchase_date__year=year
+        owner=request.user, is_credit_card=False, is_invoice_payment=False, purchase_date__month=month, purchase_date__year=year
     ).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
     planned_card_spend = Installment.objects.filter(
-        due_date__month=month, due_date__year=year
+        transaction__owner=request.user, due_date__month=month, due_date__year=year
     ).aggregate(Sum('amount'))['amount__sum'] or 0
     planned_card_fixed_spend = FixedExpense.objects.filter(
-        is_credit_card=True
+        owner=request.user, is_credit_card=True
     ).aggregate(Sum('expected_amount'))['expected_amount__sum'] or 0
     total_planned_spent = planned_debit_spend + planned_card_spend + planned_card_fixed_spend
     planned_leftover = total_planned - total_planned_spent
@@ -446,7 +447,7 @@ def category_report(request):
         'total_planned': total_planned,
         'total_planned_spent': total_planned_spent,
         'planned_leftover': planned_leftover,
-        'total_pending_categorization': _count_pending_categorization(),
+        'total_pending_categorization': _count_pending_categorization(request.user),
     }
     return render(request, 'category_report.html', context)
 
@@ -464,12 +465,12 @@ def annual_report(request):
     year = int(request.GET.get('ano', timezone.now().year))
     today = timezone.now().date()
 
-    total_recurring_fixed_income = float(FixedIncome.objects.aggregate(t=Sum('amount'))['t'] or 0.0)
+    total_recurring_fixed_income = float(FixedIncome.objects.for_user(request.user).aggregate(t=Sum('amount'))['t'] or 0.0)
 
     year_start = date(year, 1, 1)
-    starting_balance = _checking_balance_before(year_start)
+    starting_balance = _checking_balance_before(request.user, year_start)
     months = [date(year, i, 1) for i in range(1, 13)]
-    month_rows = _build_month_rows(months, starting_balance, today, total_recurring_fixed_income)
+    month_rows = _build_month_rows(request.user, months, starting_balance, today, total_recurring_fixed_income)
 
     months_grid = []
     for row in month_rows:
@@ -497,7 +498,7 @@ def annual_report(request):
 
 def category_expense_detail(request, categoria_id):
     """Shows the full, category-exclusive expense listing ordered from most to least expensive"""
-    category = get_object_or_404(Category, id=categoria_id)
+    category = get_owned_or_404(request, Category, id=categoria_id)
     month = int(request.GET.get('mes', timezone.now().month))
     year = int(request.GET.get('ano', timezone.now().year))
 
@@ -505,6 +506,7 @@ def category_expense_detail(request, categoria_id):
 
     # 1. Debit / cash
     debit_transactions = Transaction.objects.filter(
+        owner=request.user,
         category=category,
         is_credit_card=False,
         is_invoice_payment=False,
@@ -521,6 +523,7 @@ def category_expense_detail(request, categoria_id):
 
     # 2. Credit card installments
     card_installments = Installment.objects.filter(
+        transaction__owner=request.user,
         transaction__category=category,
         due_date__month=month,
         due_date__year=year
@@ -537,7 +540,7 @@ def category_expense_detail(request, categoria_id):
     # Filters fixed expenses to the queried month/year so subscriptions from other
     # months don't leak into this breakdown.
     card_fixed_expenses = FixedExpense.objects.filter(
-        category=category, is_credit_card=True, due_day__gt=0  # Just to simulate the date
+        owner=request.user, category=category, is_credit_card=True, due_day__gt=0  # Just to simulate the date
     )
     for expense in card_fixed_expenses:
         expense_details.append({

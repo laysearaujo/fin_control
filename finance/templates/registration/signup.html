@@ -1,0 +1,60 @@
+{% extends 'auth_base.html' %}
+
+{% block content %}
+<h4 class="fw-bold text-center mb-4">Criar Conta</h4>
+
+<form method="POST">
+    {% csrf_token %}
+    <div class="mb-3">
+        <label class="form-label fw-bold text-muted small text-uppercase" for="id_username">Usuário</label>
+        <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-person-fill"></i></span>
+            <input type="text" name="username" class="form-control auth-input" id="id_username" value="{{ form.username.value|default:'' }}" autofocus required>
+        </div>
+        {% if form.username.errors %}<div class="text-danger small fw-bold">{{ form.username.errors }}</div>{% endif %}
+    </div>
+    <div class="mb-3">
+        <label class="form-label fw-bold text-muted small text-uppercase" for="id_password1">Senha</label>
+        <div class="input-group position-relative">
+            <span class="input-group-text"><i class="bi bi-lock-fill"></i></span>
+            <input type="password" name="password1" class="form-control auth-input pe-5" id="id_password1" required>
+            <button type="button" class="btn btn-link text-muted position-absolute top-50 end-0 translate-middle-y pe-3 toggle-password" data-target="id_password1" tabindex="-1" onmousedown="event.preventDefault()" style="z-index: 5;">
+                <i class="bi bi-eye"></i>
+            </button>
+        </div>
+        {% if form.password1.errors %}<div class="text-danger small fw-bold">{{ form.password1.errors }}</div>{% endif %}
+    </div>
+    <div class="mb-4">
+        <label class="form-label fw-bold text-muted small text-uppercase" for="id_password2">Confirmar Senha</label>
+        <div class="input-group position-relative">
+            <span class="input-group-text"><i class="bi bi-lock-fill"></i></span>
+            <input type="password" name="password2" class="form-control auth-input pe-5" id="id_password2" required>
+            <button type="button" class="btn btn-link text-muted position-absolute top-50 end-0 translate-middle-y pe-3 toggle-password" data-target="id_password2" tabindex="-1" onmousedown="event.preventDefault()" style="z-index: 5;">
+                <i class="bi bi-eye"></i>
+            </button>
+        </div>
+        {% if form.password2.errors %}<div class="text-danger small fw-bold">{{ form.password2.errors }}</div>{% endif %}
+    </div>
+    <button type="submit" class="btn btn-auth-primary w-100">Criar Conta</button>
+</form>
+
+<p class="text-center text-muted small mt-4 mb-0">
+    Já tem conta? <a href="{% url 'login' %}" class="fw-bold text-success text-decoration-none">Entrar</a>
+</p>
+
+<script>
+    document.querySelectorAll('.toggle-password').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const input = document.getElementById(btn.dataset.target);
+            const icon = btn.querySelector('i');
+            const showing = input.type === 'text';
+            input.type = showing ? 'password' : 'text';
+            icon.classList.toggle('bi-eye', showing);
+            icon.classList.toggle('bi-eye-slash', !showing);
+            // Changing an input's type blurs it in some browsers - re-focus so the
+            // field doesn't visually lose its "active" highlight after the click
+            input.focus();
+        });
+    });
+</script>
+{% endblock %}

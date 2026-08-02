@@ -4,16 +4,15 @@ the "Histórico de Movimentações" list (they're not a cash movement, just a yi
 label), but plotted on the "Evolução do Saldo" chart at the date they actually
 happened, interleaved with real aportes/resgates.
 """
-from django.test import TestCase, Client
-
+from .helpers import AuthenticatedTestCase
 from ..models import Category, SavingsBox, SavingsBoxYieldEvent, Transaction
 
 
-class SavingsBoxHistoryTests(TestCase):
+class SavingsBoxHistoryTests(AuthenticatedTestCase):
     def setUp(self):
-        self.client = Client()
-        self.category = Category.objects.create(name='Reserva', reverse_logic=True)
-        self.box = SavingsBox.objects.create(name='Caixinha', current_balance=1000)
+        super().setUp()
+        self.category = Category.objects.create(owner=self.user, name='Reserva', reverse_logic=True)
+        self.box = SavingsBox.objects.create(owner=self.user, name='Caixinha', current_balance=1000)
 
     def test_yield_event_does_not_appear_in_the_movements_list(self):
         SavingsBoxYieldEvent.objects.create(box=self.box, date='2031-01-15', amount=25)
@@ -24,7 +23,7 @@ class SavingsBoxHistoryTests(TestCase):
 
     def test_transactions_still_appear_in_the_movements_list(self):
         txn = Transaction.objects.create(
-            description='Aporte', total_amount=100, purchase_date='2031-01-01',
+            owner=self.user, description='Aporte', total_amount=100, purchase_date='2031-01-01',
             target_savings_box=self.box, category=self.category, is_credit_card=False,
         )
         response = self.client.get(f'/caixinhas/detalhes/{self.box.id}/')
@@ -36,17 +35,17 @@ class SavingsBoxHistoryTests(TestCase):
         self.assertContains(response, 'Nenhuma movimentação registrada ainda.')
 
 
-class SavingsBoxChartTests(TestCase):
+class SavingsBoxChartTests(AuthenticatedTestCase):
     """The chart is anchored on initial_balance and walks forward through every
     aporte/resgate/yield event in date order, so the ending point always matches
     current_balance exactly."""
 
     def setUp(self):
-        self.client = Client()
-        self.category = Category.objects.create(name='Reserva', reverse_logic=True)
+        super().setUp()
+        self.category = Category.objects.create(owner=self.user, name='Reserva', reverse_logic=True)
 
     def test_yield_event_is_plotted_at_its_own_date(self):
-        box = SavingsBox.objects.create(name='Caixinha', current_balance=1000)
+        box = SavingsBox.objects.create(owner=self.user, name='Caixinha', current_balance=1000)
         SavingsBoxYieldEvent.objects.create(box=box, date='2031-01-15', amount=-15)
 
         response = self.client.get(f'/caixinhas/detalhes/{box.id}/')
@@ -54,14 +53,14 @@ class SavingsBoxChartTests(TestCase):
         self.assertEqual(response.context['balance_history'], [1000.0, 985.0])
 
     def test_transactions_and_yield_events_interleave_chronologically(self):
-        box = SavingsBox.objects.create(name='Caixinha', current_balance=0)
+        box = SavingsBox.objects.create(owner=self.user, name='Caixinha', current_balance=0)
         Transaction.objects.create(
-            description='Aporte', total_amount=100, purchase_date='2031-01-01',
+            owner=self.user, description='Aporte', total_amount=100, purchase_date='2031-01-01',
             target_savings_box=box, category=self.category, is_credit_card=False,
         )
         SavingsBoxYieldEvent.objects.create(box=box, date='2031-01-15', amount=10)
         Transaction.objects.create(
-            description='Resgate', total_amount=30, purchase_date='2031-01-30',
+            owner=self.user, description='Resgate', total_amount=30, purchase_date='2031-01-30',
             source_savings_box=box, is_internal_transfer=True, is_credit_card=False,
         )
 
@@ -70,10 +69,10 @@ class SavingsBoxChartTests(TestCase):
         self.assertEqual(response.context['balance_history'], [0.0, 100.0, 110.0, 80.0])
 
     def test_chart_ends_exactly_on_current_balance(self):
-        box = SavingsBox.objects.create(name='Caixinha', current_balance=500, initial_balance=200)
+        box = SavingsBox.objects.create(owner=self.user, name='Caixinha', current_balance=500, initial_balance=200)
         SavingsBox.objects.filter(id=box.id).update(initial_balance=200)
         Transaction.objects.create(
-            description='Aporte', total_amount=250, purchase_date='2031-01-01',
+            owner=self.user, description='Aporte', total_amount=250, purchase_date='2031-01-01',
             target_savings_box=box, category=self.category, is_credit_card=False,
         )
         SavingsBoxYieldEvent.objects.create(box=box, date='2031-02-01', amount=50)

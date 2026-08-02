@@ -2,17 +2,13 @@
 "+ Nova Categoria" modal) and the bulk recategorization tool built after an incident
 where real categories/boxes were accidentally deleted.
 """
-from django.test import TestCase, Client
-
+from .helpers import AuthenticatedTestCase
 from ..models import Category, CreditCard, FixedExpense, OneOffBill, Transaction
 
 
-class CategoryCardsTests(TestCase):
-    def setUp(self):
-        self.client = Client()
-
+class CategoryCardsTests(AuthenticatedTestCase):
     def test_get_lists_existing_categories(self):
-        Category.objects.create(name='Lazer', monthly_cap=200)
+        Category.objects.create(owner=self.user, name='Lazer', monthly_cap=200)
         response = self.client.get('/categorias/cadastro/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Lazer')
@@ -37,13 +33,13 @@ class CategoryCardsTests(TestCase):
         self.assertEqual(Category.objects.count(), 0)
 
 
-class EditCategoryPopupTests(TestCase):
+class EditCategoryPopupTests(AuthenticatedTestCase):
     """Editing a category is now a popup on the card-grid page (like creating one),
     instead of navigating to the old full-page form."""
 
     def setUp(self):
-        self.client = Client()
-        self.category = Category.objects.create(name='Lazer', monthly_cap=200, reverse_logic=False)
+        super().setUp()
+        self.category = Category.objects.create(owner=self.user, name='Lazer', monthly_cap=200, reverse_logic=False)
 
     def test_post_updates_the_category_and_redirects_back_to_the_card_grid(self):
         response = self.client.post(f'/categorias/editar/{self.category.id}/', {
@@ -70,15 +66,15 @@ class EditCategoryPopupTests(TestCase):
         self.assertEqual(self.category.monthly_cap, 200)
 
 
-class RecategorizePendingTests(TestCase):
+class RecategorizePendingTests(AuthenticatedTestCase):
     def setUp(self):
-        self.client = Client()
-        self.category = Category.objects.create(name='Mercado')
+        super().setUp()
+        self.category = Category.objects.create(owner=self.user, name='Mercado')
 
     def test_pending_items_without_category_are_listed(self):
-        txn = Transaction.objects.create(description='Sem categoria', total_amount=10, is_credit_card=False)
-        fixed = FixedExpense.objects.create(name='Sem categoria fixa', expected_amount=20, due_day=5)
-        bill = OneOffBill.objects.create(title='Sem categoria avulsa', amount=30, due_date='2031-01-01')
+        txn = Transaction.objects.create(owner=self.user, description='Sem categoria', total_amount=10, is_credit_card=False)
+        fixed = FixedExpense.objects.create(owner=self.user, name='Sem categoria fixa', expected_amount=20, due_day=5)
+        bill = OneOffBill.objects.create(owner=self.user, title='Sem categoria avulsa', amount=30, due_date='2031-01-01')
 
         response = self.client.get('/categorias/recategorizar/')
         self.assertIn(txn, response.context['pending_transactions'])
@@ -88,9 +84,9 @@ class RecategorizePendingTests(TestCase):
     def test_invoice_payments_are_never_listed_as_pending(self):
         """Invoice payments are lump sums that never have a category by design -
         they must not show up as something that "needs" categorizing."""
-        card = CreditCard.objects.create(name='Cartão', limit=1000, closing_day=28, due_day=10)
+        card = CreditCard.objects.create(owner=self.user, name='Cartão', limit=1000, closing_day=28, due_day=10)
         Transaction.objects.create(
-            description='Pgto Fatura', total_amount=100, is_credit_card=False,
+            owner=self.user, description='Pgto Fatura', total_amount=100, is_credit_card=False,
             is_invoice_payment=True, invoice_month=1, invoice_year=2031, credit_card=card,
         )
         response = self.client.get('/categorias/recategorizar/')
@@ -99,15 +95,15 @@ class RecategorizePendingTests(TestCase):
 
     def test_overdraft_payment_labels_are_never_listed_as_pending(self):
         Transaction.objects.create(
-            description='Pagamento Cheque Especial', total_amount=50, is_credit_card=False,
+            owner=self.user, description='Pagamento Cheque Especial', total_amount=50, is_credit_card=False,
             is_internal_transfer=True, is_overdraft_payment=True,
         )
         response = self.client.get('/categorias/recategorizar/')
         self.assertEqual(list(response.context['pending_transactions']), [])
 
     def test_post_bulk_assigns_categories(self):
-        txn = Transaction.objects.create(description='Sem categoria', total_amount=10, is_credit_card=False)
-        fixed = FixedExpense.objects.create(name='Sem categoria fixa', expected_amount=20, due_day=5)
+        txn = Transaction.objects.create(owner=self.user, description='Sem categoria', total_amount=10, is_credit_card=False)
+        fixed = FixedExpense.objects.create(owner=self.user, name='Sem categoria fixa', expected_amount=20, due_day=5)
 
         self.client.post('/categorias/recategorizar/', {
             f'transaction_{txn.id}': str(self.category.id),
@@ -120,7 +116,7 @@ class RecategorizePendingTests(TestCase):
         self.assertEqual(fixed.category, self.category)
 
     def test_post_with_blank_selection_leaves_category_unset(self):
-        txn = Transaction.objects.create(description='Sem categoria', total_amount=10, is_credit_card=False)
+        txn = Transaction.objects.create(owner=self.user, description='Sem categoria', total_amount=10, is_credit_card=False)
         self.client.post('/categorias/recategorizar/', {f'transaction_{txn.id}': ''})
         txn.refresh_from_db()
         self.assertIsNone(txn.category)

@@ -28,8 +28,8 @@ def annual_analysis(request):
             simulated_months.append(start_date + relativedelta(months=i))
 
     # Totals (to avoid querying the DB inside the loop)
-    fixed_incomes = list(FixedIncome.objects.all())
-    total_fixed_expense = FixedExpense.objects.aggregate(Sum('expected_amount'))['expected_amount__sum'] or 0
+    fixed_incomes = list(FixedIncome.objects.for_user(request.user))
+    total_fixed_expense = FixedExpense.objects.for_user(request.user).aggregate(Sum('expected_amount'))['expected_amount__sum'] or 0
 
     # Loop over the next 12 months
     for i in range(12):
@@ -37,8 +37,7 @@ def annual_analysis(request):
 
         # Income actually logged this month (may already include salaries already received)
         actual_income_this_month = Income.objects.filter(
-            date__month=ref_date.month,
-            date__year=ref_date.year
+            owner=request.user, date__month=ref_date.month, date__year=ref_date.year
         ).aggregate(Sum('amount'))['amount__sum'] or 0
 
         # Only forecasts a fixed income if it hasn't already been logged as received this
@@ -46,7 +45,7 @@ def annual_analysis(request):
         forecast_income = 0
         for fixed_income in fixed_incomes:
             already_received = Income.objects.filter(
-                fixed_income=fixed_income, date__month=ref_date.month, date__year=ref_date.year
+                owner=request.user, fixed_income=fixed_income, date__month=ref_date.month, date__year=ref_date.year
             ).exists()
             if not already_received:
                 forecast_income += fixed_income.amount
@@ -55,8 +54,7 @@ def annual_analysis(request):
 
         # Installments already committed
         actual_installments = Installment.objects.filter(
-            due_date__month=ref_date.month,
-            due_date__year=ref_date.year
+            transaction__owner=request.user, due_date__month=ref_date.month, due_date__year=ref_date.year
         ).aggregate(Sum('amount'))['amount__sum'] or 0
 
         committed = total_fixed_expense + actual_installments

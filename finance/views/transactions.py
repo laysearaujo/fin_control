@@ -1,4 +1,4 @@
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.db import transaction
 from django.db.models import Sum
@@ -8,6 +8,7 @@ from dateutil.relativedelta import relativedelta
 
 from ..models import Transaction, Income, FixedIncome, Installment, SavingsBox
 from ..forms import TransactionForm, IncomeForm
+from ._helpers import get_owned_or_404
 from .reports import MESES_PT
 
 
@@ -46,7 +47,7 @@ def _apply_savings_box_effect(txn):
         box.save()
 
 
-def _create_overdraft_payment_if_needed(income):
+def _create_overdraft_payment_if_needed(user, income):
     """When new income arrives and the real balance right before it was negative
     (you were in the "cheque especial"), labels part of that income as paying it off.
 
@@ -62,9 +63,9 @@ def _create_overdraft_payment_if_needed(income):
     balance calculation is blind to them by design.
     """
     real_balance_before = (
-        Income.objects.filter(date__lt=income.date).aggregate(Sum('amount'))['amount__sum'] or 0
+        Income.objects.filter(owner=user, date__lt=income.date).aggregate(Sum('amount'))['amount__sum'] or 0
     ) - (
-        Transaction.objects.filter(is_credit_card=False, is_internal_transfer=False, purchase_date__lt=income.date)
+        Transaction.objects.filter(owner=user, is_credit_card=False, is_internal_transfer=False, purchase_date__lt=income.date)
         .aggregate(Sum('total_amount'))['total_amount__sum'] or 0
     )
 
@@ -74,7 +75,7 @@ def _create_overdraft_payment_if_needed(income):
     total_deficit = abs(real_balance_before)
 
     already_labeled = Transaction.objects.filter(
-        is_overdraft_payment=True, purchase_date__lt=income.date
+        owner=user, is_overdraft_payment=True, purchase_date__lt=income.date
     ).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
 
     remaining_deficit = total_deficit - already_labeled
@@ -84,6 +85,7 @@ def _create_overdraft_payment_if_needed(income):
     payment_amount = min(income.amount, remaining_deficit)
 
     Transaction.objects.create(
+        owner=user,
         description="Pagamento Cheque Especial",
         total_amount=payment_amount,
         purchase_date=income.date,
@@ -96,10 +98,11 @@ def _create_overdraft_payment_if_needed(income):
 
 def new_transaction(request):
     if request.method == 'POST':
-        form = TransactionForm(request.POST)
+        form = TransactionForm(request.POST, user=request.user)
         if form.is_valid():
             # Builds the object but doesn't hit the DB yet
             new_transaction_obj = form.save(commit=False)
+            new_transaction_obj.owner = request.user
 
             try:
                 # transaction.atomic() ensures both actions (saving the expense and updating the balance) happen together
@@ -120,7 +123,7 @@ def new_transaction(request):
                 # If something goes wrong, don't crash the app, just log it
                 print(f"Erro ao salvar transação: {e}")
     else:
-        form = TransactionForm()
+        form = TransactionForm(user=request.user)
 
     return render(request, 'generic_form.html', {'form': form, 'title': '💸 Nova Despesa'})
 
@@ -134,29 +137,28 @@ def new_income(request):
     fixed_income = None
 
     if fixed_income_id:
-        try:
-            fixed_income = FixedIncome.objects.get(id=fixed_income_id)
+        fixed_income = FixedIncome.objects.for_user(request.user).filter(id=fixed_income_id).first()
+        if fixed_income:
             # Auto-fills with the planning data
             initial_data = {
                 'description': fixed_income.description,
                 'amount': fixed_income.amount,
                 'date': timezone.now().date()  # Already defaults to today
             }
-        except FixedIncome.DoesNotExist:
-            fixed_income = None
 
     # Loads the form already pre-filled (if there was data)
     form = IncomeForm(request.POST or None, initial=initial_data)
 
     if form.is_valid():
         income = form.save(commit=False)
+        income.owner = request.user
         # Links it back to the fixed income it settles, so the dashboard can tell
         # it was received without matching on the description text
         income.fixed_income = fixed_income
         income.save()
         messages.success(request, f"Receita \"{income.description}\" de R$ {income.amount:.2f} adicionada!")
 
-        overdraft_payment = _create_overdraft_payment_if_needed(income)
+        overdraft_payment = _create_overdraft_payment_if_needed(request.user, income)
         if overdraft_payment:
             messages.info(request, f"R$ {overdraft_payment:.2f} dessa receita foi usado pra quitar o cheque especial do saldo negativo anterior.")
 
@@ -185,7 +187,7 @@ def statement(request):
         selected_year = None
 
     # 1. Fetches income entries
-    income_entries = Income.objects.all()
+    income_entries = Income.objects.for_user(request.user)
     if selected_month and selected_year:
         income_entries = income_entries.filter(date__month=selected_month, date__year=selected_year)
     if query:
@@ -193,7 +195,7 @@ def statement(request):
     income_entries = income_entries.order_by('-date')
 
     # 2. Fetches expense entries
-    expense_entries = Transaction.objects.all()
+    expense_entries = Transaction.objects.for_user(request.user)
     if selected_month and selected_year:
         expense_entries = expense_entries.filter(purchase_date__month=selected_month, purchase_date__year=selected_year)
     if query:
@@ -264,8 +266,8 @@ def statement(request):
             current_group['total_expense'] += movement['amount']
 
     # 6. Every year that actually has data, so the year dropdown only offers real options
-    years_with_data = {d.year for d in Income.objects.dates('date', 'year')}
-    years_with_data.update(d.year for d in Transaction.objects.dates('purchase_date', 'year'))
+    years_with_data = {d.year for d in Income.objects.for_user(request.user).dates('date', 'year')}
+    years_with_data.update(d.year for d in Transaction.objects.for_user(request.user).dates('purchase_date', 'year'))
     available_years = sorted(years_with_data, reverse=True) or [timezone.now().year]
 
     return render(request, 'statement.html', {
@@ -279,10 +281,10 @@ def statement(request):
 
 
 def edit_transaction(request, id):
-    txn = get_object_or_404(Transaction, id=id)
+    txn = get_owned_or_404(request, Transaction, id=id)
 
     if request.method == 'POST':
-        form = TransactionForm(request.POST, instance=txn)
+        form = TransactionForm(request.POST, instance=txn, user=request.user)
         if form.is_valid():
             # Snapshots the old state before the form overwrites it in place, so
             # whatever it did to a savings box's balance can be undone first - editing
@@ -322,7 +324,7 @@ def edit_transaction(request, id):
 
             return redirect('extrato')
     else:
-        form = TransactionForm(instance=txn)
+        form = TransactionForm(instance=txn, user=request.user)
 
     return render(request, 'generic_form.html', {
         'form': form,
@@ -332,7 +334,7 @@ def edit_transaction(request, id):
 
 def delete_transaction(request, id):
     """Allows deleting a wrong entry"""
-    txn = get_object_or_404(Transaction, id=id)
+    txn = get_owned_or_404(request, Transaction, id=id)
     _reverse_savings_box_effect(txn)
     txn.delete()
     return redirect(request.META.get('HTTP_REFERER', '/'))

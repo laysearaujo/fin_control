@@ -1,9 +1,9 @@
 from django import forms
-from .models import Transaction, Income, CreditCard, Category, FixedExpense, FixedIncome, SavingsBox, SelfLoan
+from .models import Transaction, Income, CreditCard, Category, FixedExpense, FixedIncome, SavingsBox, SelfLoan, OwnedModel
 
 # Estilo padrão para todos os inputs ficarem bonitos
 class BootstrapModelForm(forms.ModelForm):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         for field_name, field in self.fields.items():
             # Checkboxes precisam da classe do Bootstrap pra virar um switch, não uma barra gigante
@@ -12,6 +12,11 @@ class BootstrapModelForm(forms.ModelForm):
                 field.widget.attrs.setdefault('role', 'switch')
             else:
                 field.widget.attrs['class'] = 'form-control form-control-lg'
+
+            # Dropdowns pointing at another user's data (category, target_savings_box,
+            # credit_card etc.) must only ever offer THIS user's own records
+            if isinstance(field, forms.ModelChoiceField) and issubclass(field.queryset.model, OwnedModel):
+                field.queryset = field.queryset.model.objects.for_user(user) if user else field.queryset.none()
 
 class TransactionForm(BootstrapModelForm):
     class Meta:
@@ -84,7 +89,12 @@ class InitialSetupForm(forms.Form):
 
     tem_fatura = forms.BooleanField(label="Tem fatura de cartão em aberto?", required=False, widget=forms.CheckboxInput(attrs={'class': 'form-check-input', 'id': 'check_fatura'}))
     valor_fatura = forms.DecimalField(label="Valor Total da Fatura de Dezembro/Passada", required=False, widget=forms.NumberInput(attrs={'class': 'form-control'}))
-    cartao_fatura = forms.ModelChoiceField(queryset=CreditCard.objects.all(), required=False, label="Qual cartão?", widget=forms.Select(attrs={'class': 'form-select'}))
+    cartao_fatura = forms.ModelChoiceField(queryset=CreditCard.objects.none(), required=False, label="Qual cartão?", widget=forms.Select(attrs={'class': 'form-select'}))
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if user:
+            self.fields['cartao_fatura'].queryset = CreditCard.objects.for_user(user)
 
 # --- SAVINGS BOXES ---
 class SavingsBoxForm(BootstrapModelForm):
