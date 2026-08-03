@@ -1,3 +1,5 @@
+import json
+
 from django.shortcuts import render
 from django.db.models import Sum, Q
 from django.utils import timezone
@@ -424,7 +426,12 @@ def category_report(request):
         'next_month_url': f"?mes={next_month_url.month}&ano={next_month_url.year}",
         'labels': expense_labels,
         'data': expense_values,
-        'category_ids': expense_ids,
+        # json.dumps (not the raw list) so an uncategorized transaction's None becomes
+        # the valid JS token "null" instead of the literal text "None" - the latter is
+        # a JS ReferenceError that silently kills the whole chart-building script,
+        # which is why a month with zero uncategorized spend rendered fine while one
+        # with any "Sem Categoria" transaction showed every chart on the page blank.
+        'category_ids': json.dumps(expense_ids),
         'deposit_labels': deposit_labels,
         'deposit_values': deposit_values,
         'month_actual_cost': month_actual_cost,

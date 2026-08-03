@@ -11,6 +11,8 @@ from datetime import date
 from dateutil.relativedelta import relativedelta
 from django.utils import timezone
 
+import json
+
 from .helpers import AuthenticatedTestCase
 from ..models import Category, FixedExpense, FixedIncome, Transaction
 from ..views.reports import _build_month_rows
@@ -117,3 +119,22 @@ class HistoricalAverageExcludesInProgressMonthTests(AuthenticatedTestCase):
         response = self.client.get('/relatorios/categorias/')
 
         self.assertEqual(response.context['average_living_cost'], 123.0)
+
+
+class CategoryIdsJsonSerializationTests(AuthenticatedTestCase):
+    """An uncategorized ("Sem Categoria") transaction makes category_ids contain a
+    None - rendered raw (Python's str()) that becomes the literal text "None" inside
+    the page's <script> tag, an invalid JS token whose ReferenceError silently kills
+    every chart on the page. json.dumps must be used instead so it becomes "null"."""
+
+    def test_uncategorized_transaction_does_not_break_the_chart_script(self):
+        Transaction.objects.create(
+            owner=self.user, description='Sem categoria', total_amount=50,
+            purchase_date=timezone.now().date(), is_credit_card=False, category=None,
+        )
+
+        response = self.client.get('/relatorios/categorias/')
+
+        self.assertEqual(response.context['category_ids'], json.dumps([None]))
+        self.assertNotContains(response, 'const idsDespesas = [None]')
+        self.assertContains(response, 'const idsDespesas = [null]')
