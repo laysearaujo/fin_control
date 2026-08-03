@@ -253,7 +253,14 @@
     const mes = "{{ mes }}";
     const ano = "{{ ano }}";
 
-    const coresGastos = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#8E44AD', '#34495E', '#16A085'];
+    // 16 cores, ordem fixa - validada (contraste + distinção sob daltonismo) com
+    // scripts/validate_palette.js da skill dataviz. Não reordenar/trocar cores
+    // isoladamente sem rodar o validador de novo (a ordem é o que garante a
+    // distinção entre cores vizinhas na pizza).
+    const coresGastos = [
+        '#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948',
+        '#4fc3d9', '#b8860b', '#c05299', '#4d7a1f', '#7d6bd0', '#2f4f8f', '#0d9488', '#a0522d',
+    ];
     const coresAportes = ['#2ECC71', '#27AE60', '#1ABC9C', '#16A085', '#2C3E50'];
 
     // 1. GRÁFICO HISTÓRICO DE LINHAS
