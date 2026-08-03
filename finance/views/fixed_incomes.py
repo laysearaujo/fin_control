@@ -1,4 +1,5 @@
 from django.shortcuts import render, redirect
+from django.utils import timezone
 
 from ..models import FixedIncome, Income
 from ..forms import FixedIncomeForm, IncomeForm
@@ -7,7 +8,10 @@ from ._helpers import get_owned_or_404
 
 def manage_fixed_incomes(request):
     incomes = FixedIncome.objects.for_user(request.user)
-    return render(request, 'fixed_incomes_list.html', {'incomes': incomes})
+    return render(request, 'fixed_incomes_list.html', {
+        'incomes': incomes,
+        'today': timezone.now().date(),
+    })
 
 
 def new_fixed_income(request):
@@ -45,8 +49,10 @@ def edit_income(request, id):
 
     if form.is_valid():
         form.save()
-        # Redirects to the income's month (so you can see the change)
-        return redirect(f'/?mes={income.date.month}&ano={income.date.year}')
+        # Now edited via a popup on the Extrato page - stays there instead of
+        # jumping to the dashboard, falling back to the income's own month if
+        # there's somehow no referer (e.g. a direct POST)
+        return redirect(request.META.get('HTTP_REFERER') or f'/?mes={income.date.month}&ano={income.date.year}')
 
     # If not POST (when clicking the ✏️ button), opens the form screen
     return render(request, 'generic_form.html', {

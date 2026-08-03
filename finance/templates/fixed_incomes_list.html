@@ -18,12 +18,13 @@
                 <h5 class="fw-bold mb-0 text-dark">{{ item.description }}</h5>
 
                 <div class="d-flex gap-2">
-                    <a href="{% url 'editar_receita_fixa' item.id %}"
+                    <button type="button"
                        class="btn btn-sm btn-light text-primary border-0 rounded-circle shadow-sm"
                        style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
-                       title="Editar Salário">
+                       title="Editar Salário"
+                       data-bs-toggle="modal" data-bs-target="#modalEditarReceitaFixa{{ item.id }}">
                         ✏️
-                    </a>
+                    </button>
 
                     <a href="{% url 'apagar_receita_fixa' item.id %}"
                        class="btn btn-sm btn-light text-danger border-0 rounded-circle shadow-sm"
@@ -40,11 +41,48 @@
             <div class="d-flex justify-content-between align-items-center mt-3 pt-2">
                 <small class="text-muted">Dia <strong class="text-dark">{{ item.payment_day }}</strong></small>
 
-                <a href="{% url 'nova_receita' %}?fixa_id={{ item.id }}" class="btn btn-sm btn-success fw-bold rounded-pill px-3 shadow-sm">
-                    💲 Receber
-                </a>
+                <form method="POST" action="{% url 'nova_receita' %}?fixa_id={{ item.id }}" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="description" value="{{ item.description }}">
+                    <input type="hidden" name="amount" value="{{ item.amount|stringformat:'.2f' }}">
+                    <input type="hidden" name="date" value="{{ today|date:'Y-m-d' }}">
+                    <button type="submit" class="btn btn-sm btn-success fw-bold rounded-pill px-3 shadow-sm">
+                        💲 Receber
+                    </button>
+                </form>
             </div>
 
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalEditarReceitaFixa{{ item.id }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow rounded-4">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title fw-bold">✏️ Editar Salário Fixo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form action="{% url 'editar_receita_fixa' item.id %}" method="POST">
+                    {% csrf_token %}
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold text-muted small text-uppercase" for="fixedIncomeDesc{{ item.id }}">Descrição</label>
+                            <input type="text" id="fixedIncomeDesc{{ item.id }}" name="description" class="form-control form-control-lg" value="{{ item.description }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold text-muted small text-uppercase" for="fixedIncomeAmount{{ item.id }}">Valor (R$)</label>
+                            <input type="number" step="0.01" id="fixedIncomeAmount{{ item.id }}" name="amount" class="form-control form-control-lg" value="{{ item.amount|stringformat:'.2f' }}" required>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label fw-bold text-muted small text-uppercase" for="fixedIncomeDay{{ item.id }}">Dia de Recebimento</label>
+                            <input type="number" min="1" max="31" id="fixedIncomeDay{{ item.id }}" name="payment_day" class="form-control form-control-lg" value="{{ item.payment_day }}" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-0">
+                        <button type="submit" class="btn btn-dark w-100 rounded-pill fw-bold shadow-sm">Salvar Alterações</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
     {% empty %}
