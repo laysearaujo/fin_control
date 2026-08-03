@@ -212,7 +212,11 @@ def statement(request):
             'amount': income.amount,
             'kind': 'income',  # Marks it as money coming in
             'id': income.id,
-            'source_model': 'income'  # So we know what to delete if needed
+            'source_model': 'income',  # So we know what to delete if needed
+            # Unique auto_id per row so N of these forms can render on the same page
+            # (edited in a popup right here) without every row's fields colliding on
+            # the same #id_description / #id_amount DOM ids
+            'edit_form': IncomeForm(instance=income, auto_id=f'edit_income_{income.id}_%s'),
         })
 
     for expense in expense_entries:
@@ -226,7 +230,8 @@ def statement(request):
             'installments_count': expense.installments_count,
             'installment_amount': expense.total_amount / expense.installments_count,
             'id': expense.id,
-            'source_model': 'transaction'
+            'source_model': 'transaction',
+            'edit_form': TransactionForm(instance=expense, user=request.user, auto_id=f'edit_txn_{expense.id}_%s'),
         })
 
     # 4. Sorts the final list by date (most recent first)
@@ -277,6 +282,8 @@ def statement(request):
         'selected_month': selected_month,
         'selected_year': selected_year,
         'query': query,
+        # So the edit-popup JS knows which per-row forms need the cartão/caixinha wiring
+        'transaction_ids': [expense.id for expense in expense_entries],
     })
 
 

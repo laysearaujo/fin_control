@@ -11,6 +11,71 @@ from .helpers import AuthenticatedTestCase
 from ..models import Category, CreditCard, SavingsBox, Transaction, Income, Installment
 
 
+class StatementEditPopupTests(AuthenticatedTestCase):
+    """Editing from the Extrato is now a per-row popup instead of a full-page
+    navigation - each row renders its own TransactionForm/IncomeForm with a unique
+    auto_id (edit_txn_<id>_/edit_income_<id>_) so N rows on the same page never
+    collide on the same #id_description-style DOM ids."""
+
+    def setUp(self):
+        super().setUp()
+        self.category = Category.objects.create(owner=self.user, name='Lazer')
+        self.today = timezone.now().date()
+
+    def test_each_transaction_gets_its_own_uniquely_prefixed_edit_form(self):
+        txn_a = Transaction.objects.create(
+            owner=self.user, description='Compra A', total_amount=10, purchase_date=self.today,
+            category=self.category, is_credit_card=False,
+        )
+        txn_b = Transaction.objects.create(
+            owner=self.user, description='Compra B', total_amount=20, purchase_date=self.today,
+            category=self.category, is_credit_card=False,
+        )
+
+        response = self.client.get('/extrato/')
+
+        self.assertContains(response, f'modalEditartransaction{txn_a.id}')
+        self.assertContains(response, f'modalEditartransaction{txn_b.id}')
+        self.assertContains(response, f'edit_txn_{txn_a.id}_description')
+        self.assertContains(response, f'edit_txn_{txn_b.id}_description')
+        self.assertIn(txn_a.id, response.context['transaction_ids'])
+        self.assertIn(txn_b.id, response.context['transaction_ids'])
+
+    def test_income_gets_its_own_edit_popup(self):
+        income = Income.objects.create(owner=self.user, description='Salário', amount=1000, date=self.today)
+
+        response = self.client.get('/extrato/')
+
+        self.assertContains(response, f'modalEditarincome{income.id}')
+        self.assertContains(response, f'edit_income_{income.id}_description')
+
+    def test_submitting_the_popup_form_actually_updates_the_transaction(self):
+        txn = Transaction.objects.create(
+            owner=self.user, description='Compra', total_amount=10, purchase_date=self.today,
+            category=self.category, is_credit_card=False,
+        )
+        response = self.client.post(f'/extrato/editar/{txn.id}/', {
+            'description': 'Compra Editada', 'total_amount': '15', 'category': self.category.id,
+            'installments_count': '1', 'purchase_date': str(self.today),
+        }, HTTP_REFERER='/extrato/')
+
+        self.assertRedirects(response, '/extrato/')
+        txn.refresh_from_db()
+        self.assertEqual(txn.description, 'Compra Editada')
+        self.assertEqual(txn.total_amount, 15)
+
+    def test_submitting_the_income_popup_form_stays_on_the_statement_page(self):
+        income = Income.objects.create(owner=self.user, description='Salário', amount=1000, date=self.today)
+        response = self.client.post(f'/receita/editar/{income.id}/', {
+            'description': 'Salário Editado', 'amount': '1200', 'date': str(self.today),
+        }, HTTP_REFERER='/extrato/')
+
+        self.assertRedirects(response, '/extrato/')
+        income.refresh_from_db()
+        self.assertEqual(income.description, 'Salário Editado')
+        self.assertEqual(income.amount, 1200)
+
+
 class StatementCreditCardTotalsTests(AuthenticatedTestCase):
     """A parceled credit-card purchase's Transaction.total_amount is the FULL price
     (e.g. R$7880 for a 7x purchase), not what actually left the account that month -

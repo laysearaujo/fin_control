@@ -105,19 +105,53 @@
                         </td>
 
                         <td class="pe-4 text-end">
-                            {% if item.source_model == 'transaction' %}
-                                <a href="{% url 'editar_transacao' item.id %}"
-                                   class="btn btn-sm btn-outline-primary border-0 rounded-circle p-2 me-1"
-                                   title="Editar Despesa">
-                                    ✏️
-                                </a>
-                            {% elif item.source_model == 'income' %}
-                                <a href="{% url 'editar_receita' item.id %}"
-                                   class="btn btn-sm btn-outline-primary border-0 rounded-circle p-2 me-1"
-                                   title="Editar Receita">
-                                    ✏️
-                                </a>
-                            {% endif %}
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-primary border-0 rounded-circle p-2 me-1"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#modalEditar{{ item.source_model }}{{ item.id }}"
+                                    title="{% if item.source_model == 'transaction' %}Editar Despesa{% else %}Editar Receita{% endif %}">
+                                ✏️
+                            </button>
+
+                            <div class="modal fade text-start" id="modalEditar{{ item.source_model }}{{ item.id }}" tabindex="-1">
+                                <div class="modal-dialog modal-dialog-centered">
+                                    <div class="modal-content border-0 shadow rounded-4">
+                                        <div class="modal-header border-0">
+                                            <h5 class="modal-title fw-bold">
+                                                ✏️ {% if item.source_model == 'transaction' %}Editar Despesa{% else %}Editar Receita{% endif %}
+                                            </h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <form method="POST" action="{% if item.source_model == 'transaction' %}{% url 'editar_transacao' item.id %}{% else %}{% url 'editar_receita' item.id %}{% endif %}">
+                                            {% csrf_token %}
+                                            <div class="modal-body">
+                                                {% if item.source_model == 'transaction' %}
+                                                <div class="mb-3 toggle-card">
+                                                    <div class="form-check form-switch">
+                                                        {{ item.edit_form.is_credit_card }}
+                                                        <label class="form-check-label" for="{{ item.edit_form.is_credit_card.id_for_label }}">
+                                                            <span class="toggle-title text-primary">💳 Pago no Cartão de Crédito?</span>
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                                {% endif %}
+                                                {% for field in item.edit_form %}
+                                                    {% if field.name != 'is_credit_card' %}
+                                                    <div class="mb-3" id="{% if item.source_model == 'transaction' %}edit_txn_{{ item.id }}{% else %}edit_income_{{ item.id }}{% endif %}_div_{{ field.name }}">
+                                                        <label class="form-label fw-bold text-muted small text-uppercase">{{ field.label }}</label>
+                                                        {{ field }}
+                                                        {% if field.errors %}<div class="text-danger small fw-bold">{{ field.errors }}</div>{% endif %}
+                                                    </div>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </div>
+                                            <div class="modal-footer border-0">
+                                                <button type="submit" class="btn btn-dark w-100 rounded-pill fw-bold shadow-sm">Salvar Alterações</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
 
                             <button type="button"
                                     class="btn btn-sm btn-outline-danger border-0 rounded-circle p-2"
@@ -189,4 +223,17 @@
     }
 </style>
 
+<script>
+    // Each transaction's edit popup is its own TransactionForm instance (unique
+    // auto_id per row, "edit_txn_<id>_"), so it needs the same category->caixinha
+    // and cartão->parcelas wiring the navbar's quick-add modal already uses -
+    // wireUpCaixinhaDestino/wireUpCartaoToggle (base.html) just need the right prefix.
+    document.addEventListener('DOMContentLoaded', function () {
+        const transactionIds = {{ transaction_ids|safe }};
+        transactionIds.forEach(function (id) {
+            wireUpCaixinhaDestino('edit_txn_' + id + '_');
+            wireUpCartaoToggle('edit_txn_' + id + '_');
+        });
+    });
+</script>
 {% endblock %}
