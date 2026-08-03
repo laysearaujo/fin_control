@@ -74,9 +74,34 @@
             <tbody>
                 {% for cat in categories %}
                 <tr>
-                    <td class="p-3 fw-bold">{{ cat.name }}</td>
-                    <td class="p-3 text-muted">R$ {{ cat.monthly_cap|floatformat:2 }}</td>
-                    
+                    <td class="p-3 fw-bold" style="min-width: 160px;">
+                        <a href="{% url 'detalhes_gastos_categoria' cat.id %}?mes={{ ref_date.month }}&ano={{ ref_date.year }}"
+                           class="text-dark text-decoration-none" title="Ver gastos de {{ cat.name }} em {{ ref_date|date:'F/Y' }}">
+                            {{ cat.name }}
+                        </a>
+                        {% if not cat.reverse_logic and cat.monthly_cap > 0 %}
+                        <div class="progress mt-1" style="height: 6px; width: 100px;">
+                            <div class="progress-bar {% if cat.usage_pct >= 100 %}bg-danger{% elif cat.usage_pct >= 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                 role="progressbar" style="width: {{ cat.usage_pct_width }}%"></div>
+                        </div>
+                        <small class="text-muted" style="font-size: 0.7rem;">{{ cat.usage_pct }}% do teto</small>
+                        {% endif %}
+                    </td>
+                    <td class="p-3 text-muted">
+                        R$ {{ cat.monthly_cap|floatformat:2 }}
+                        {% if cat.suggested_cap %}
+                        <form method="POST" action="{% url 'editar_categoria' cat.id %}" class="mt-1">
+                            {% csrf_token %}
+                            <input type="hidden" name="name" value="{{ cat.name }}">
+                            <input type="hidden" name="monthly_cap" value="{{ cat.suggested_cap|stringformat:'.2f' }}">
+                            {% if cat.reverse_logic %}<input type="hidden" name="reverse_logic" value="on">{% endif %}
+                            <!-- <button type="submit" class="btn btn-link btn-sm p-0 text-decoration-none" style="font-size: 0.7rem;" title="Baseado na sua média real de gasto nesta categoria">
+                                💡 Sugestão: R$ {{ cat.suggested_cap|floatformat:2 }} <span class="fw-bold">— usar</span>
+                            </button> -->
+                        </form>
+                        {% endif %}
+                    </td>
+
                     <!-- LÓGICA DO GASTO COM ALERTA -->
                     <td class="p-3 fw-bold
                         {% if cat.reverse_logic %}
@@ -89,15 +114,15 @@
                             <br><small class="text-muted fw-normal" style="font-size: 0.75rem;">(Investimento/Aporte)</small>
                         {% endif %}
                     </td>
-                    
+
                     <!-- LÓGICA DA SOBRA -->
-                    <td class="p-3 fw-bold 
+                    <td class="p-3 fw-bold
                         {% if cat.reverse_logic %}
                             {% if cat.leftover > 0 %}text-danger{% else %}text-success{% endif %}
                         {% else %}
                             {% if cat.leftover > 0 %}text-success{% else %}text-muted{% endif %}
                         {% endif %}">
-                        
+
                         {% if cat.reverse_logic %}
                             {% if cat.leftover > 0 %}
                                 Faltam R$ {{ cat.leftover|floatformat:2 }}
@@ -108,16 +133,17 @@
                             R$ {{ cat.leftover|floatformat:2 }}
                         {% endif %}
                     </td>
-                    
+
                     <!-- LÓGICA DOS BOTÕES ALINHADOS -->
                     <td class="p-3">
                         <div class="d-flex justify-content-center align-items-center gap-2">
-                            <a href="{% url 'editar_categoria' cat.id %}"
+                            <button type="button"
                                class="btn btn-sm btn-light text-primary border-0 rounded-circle shadow-sm"
                                style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
-                               title="Editar Categoria">
+                               title="Editar Categoria"
+                               data-bs-toggle="modal" data-bs-target="#modalEditarCategoria{{ cat.id }}">
                                 ✏️
-                            </a>
+                            </button>
                             <a href="{% url 'apagar_categoria' cat.id %}"
                                class="btn btn-sm btn-light text-danger border-0 rounded-circle shadow-sm"
                                style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
@@ -135,4 +161,42 @@
         </table>
     </div>
 </div>
+
+{% for cat in categories %}
+<div class="modal fade" id="modalEditarCategoria{{ cat.id }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
+            <div class="modal-header border-0">
+                <h5 class="modal-title fw-bold">✏️ Editar Categoria</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{% url 'editar_categoria' cat.id %}" method="POST">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-muted small text-uppercase" for="catNamePlan{{ cat.id }}">Nome</label>
+                        <input type="text" id="catNamePlan{{ cat.id }}" name="name" class="form-control form-control-lg" value="{{ cat.name }}" required>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label fw-bold text-muted small text-uppercase" for="catCapPlan{{ cat.id }}">Teto Mensal</label>
+                        <input type="number" step="0.01" id="catCapPlan{{ cat.id }}" name="monthly_cap" class="form-control form-control-lg" value="{{ cat.monthly_cap|stringformat:'.2f' }}" required>
+                    </div>
+                    <div class="mb-2 toggle-card toggle-card-success">
+                        <div class="form-check form-switch">
+                            <input type="checkbox" name="reverse_logic" class="form-check-input" role="switch" id="reverseLogicPlan{{ cat.id }}" {% if cat.reverse_logic %}checked{% endif %}>
+                            <label class="form-check-label" for="reverseLogicPlan{{ cat.id }}">
+                                <span class="toggle-title text-success">🔄 É uma categoria de Aporte / Reserva?</span>
+                                <span class="toggle-subtitle">Ative para inverter as cores: guardar mais que a meta ficará verde.</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="submit" class="btn btn-dark w-100 rounded-pill fw-bold shadow-sm">Salvar Alterações</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
 {% endblock %}

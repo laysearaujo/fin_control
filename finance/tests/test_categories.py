@@ -2,8 +2,13 @@
 "+ Nova Categoria" modal) and the bulk recategorization tool built after an incident
 where real categories/boxes were accidentally deleted.
 """
+from datetime import date
+
+from dateutil.relativedelta import relativedelta
+from django.utils import timezone
+
 from .helpers import AuthenticatedTestCase
-from ..models import Category, CreditCard, FixedExpense, OneOffBill, Transaction
+from ..models import Category, CreditCard, FixedExpense, FixedIncome, OneOffBill, Transaction
 
 
 class CategoryCardsTests(AuthenticatedTestCase):
@@ -120,3 +125,118 @@ class RecategorizePendingTests(AuthenticatedTestCase):
         self.client.post('/categorias/recategorizar/', {f'transaction_{txn.id}': ''})
         txn.refresh_from_db()
         self.assertIsNone(txn.category)
+
+
+class PlanningPageTests(AuthenticatedTestCase):
+    """Tests for the Planejamento table (manage_categories/categories_list.html):
+    riskiest categories float to the top, the progress bar never visually overflows
+    past 100% even when a category is blown way past its cap, and the auto-suggested
+    cap is based on the category's own trailing real spend."""
+
+    def setUp(self):
+        super().setUp()
+        self.today = timezone.now().date()
+        self.current_month_start = date(self.today.year, self.today.month, 1)
+
+    def _spend(self, category, amount, month_date):
+        Transaction.objects.create(
+            owner=self.user, description='Gasto', total_amount=amount, purchase_date=month_date,
+            category=category, is_credit_card=False,
+        )
+
+    def test_categories_sorted_by_usage_risk_descending(self):
+        safe = Category.objects.create(owner=self.user, name='Lazer', monthly_cap=1000)
+        risky = Category.objects.create(owner=self.user, name='Mercado', monthly_cap=100)
+        self._spend(safe, 100, self.today)     # 10% used
+        self._spend(risky, 90, self.today)      # 90% used
+
+        response = self.client.get('/categorias/')
+
+        names = [c['name'] for c in response.context['categories']]
+        self.assertEqual(names, ['Mercado', 'Lazer'])
+
+    def test_usage_percent_display_uncapped_but_bar_width_capped_at_100(self):
+        category = Category.objects.create(owner=self.user, name='Vestuário', monthly_cap=100)
+        self._spend(category, 125, self.today)
+
+        response = self.client.get('/categorias/')
+
+        result = response.context['categories'][0]
+        self.assertEqual(result['usage_pct'], 125)
+        self.assertEqual(result['usage_pct_width'], 100)
+
+    def test_reverse_logic_category_has_no_usage_risk(self):
+        aporte = Category.objects.create(owner=self.user, name='Aporte Reserva', monthly_cap=100, reverse_logic=True)
+        self._spend(aporte, 500, self.today)
+
+        response = self.client.get('/categorias/')
+
+        result = response.context['categories'][0]
+        self.assertEqual(result['usage_pct'], 0)
+
+    def test_suggested_cap_averages_trailing_months_excluding_current(self):
+        category = Category.objects.create(owner=self.user, name='Mercado', monthly_cap=100)
+        last_month = self.current_month_start - relativedelta(months=1)
+        two_months_ago = self.current_month_start - relativedelta(months=2)
+        self._spend(category, 400, last_month)
+        self._spend(category, 600, two_months_ago)
+        # A sliver in the still-in-progress current month, which must not count
+        self._spend(category, 10, self.today)
+
+        response = self.client.get('/categorias/')
+
+        result = next(c for c in response.context['categories'] if c['id'] == category.id)
+        self.assertEqual(float(result['suggested_cap']), 500.0)
+
+    def test_suggested_cap_hidden_when_close_to_the_current_cap(self):
+        category = Category.objects.create(owner=self.user, name='Mercado', monthly_cap=500)
+        last_month = self.current_month_start - relativedelta(months=1)
+        self._spend(category, 500.50, last_month)
+
+        response = self.client.get('/categorias/')
+
+        result = next(c for c in response.context['categories'] if c['id'] == category.id)
+        self.assertIsNone(result['suggested_cap'])
+
+    def test_applying_the_suggestion_updates_the_categorys_cap(self):
+        category = Category.objects.create(owner=self.user, name='Mercado', monthly_cap=100)
+        self.client.post(f'/categorias/editar/{category.id}/', {
+            'name': 'Mercado', 'monthly_cap': '350.00', 'reverse_logic': '',
+        }, HTTP_REFERER='/categorias/')
+
+        category.refresh_from_db()
+        self.assertEqual(category.monthly_cap, 350)
+
+    def test_edit_popup_is_available_on_the_planning_page(self):
+        category = Category.objects.create(owner=self.user, name='Mercado', monthly_cap=100)
+        response = self.client.get('/categorias/')
+        self.assertContains(response, f'modalEditarCategoria{category.id}')
+
+    def test_suggestions_are_scaled_down_when_their_sum_exceeds_income(self):
+        """Two categories whose own trailing history would suggest R$800 + R$800
+        (R$1600 total) can't both be suggested at face value against a R$1000
+        income - each gets scaled down by the same factor so they fit."""
+        FixedIncome.objects.create(owner=self.user, description='Salário', amount=1000, payment_day=5)
+        rent = Category.objects.create(owner=self.user, name='Aluguel', monthly_cap=100)
+        market = Category.objects.create(owner=self.user, name='Mercado', monthly_cap=100)
+        last_month = self.current_month_start - relativedelta(months=1)
+        self._spend(rent, 800, last_month)
+        self._spend(market, 800, last_month)
+
+        response = self.client.get('/categorias/')
+
+        results = {c['id']: c for c in response.context['categories']}
+        # 1000 / 1600 = 0.625 scale factor -> 800 * 0.625 = 500 each
+        self.assertAlmostEqual(float(results[rent.id]['suggested_cap']), 500.0, places=2)
+        self.assertAlmostEqual(float(results[market.id]['suggested_cap']), 500.0, places=2)
+
+    def test_suggestions_not_scaled_when_within_income(self):
+        FixedIncome.objects.create(owner=self.user, description='Salário', amount=5000, payment_day=5)
+        category = Category.objects.create(owner=self.user, name='Mercado', monthly_cap=100)
+        last_month = self.current_month_start - relativedelta(months=1)
+        self._spend(category, 400, last_month)
+
+        response = self.client.get('/categorias/')
+
+        result = next(c for c in response.context['categories'] if c['id'] == category.id)
+        self.assertAlmostEqual(float(result['suggested_cap']), 400.0, places=2)

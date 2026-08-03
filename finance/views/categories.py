@@ -22,6 +22,47 @@ def _count_pending_categorization(user):
     )
 
 
+def _category_spend_for_month(user, category, month, year):
+    """Real spend in a single category for a single month - debit purchases, card
+    installments due that month, and card subscriptions (which apply every month
+    regardless, same rule as everywhere else this is computed)."""
+    debit_spend = Transaction.objects.filter(
+        owner=user, category=category, is_credit_card=False,
+        purchase_date__month=month, purchase_date__year=year
+    ).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+
+    card_spend = Installment.objects.filter(
+        transaction__owner=user, transaction__category=category,
+        due_date__month=month, due_date__year=year
+    ).aggregate(Sum('amount'))['amount__sum'] or 0
+
+    card_fixed_expenses = FixedExpense.objects.filter(
+        owner=user, category=category, is_credit_card=True
+    ).aggregate(Sum('expected_amount'))['expected_amount__sum'] or 0
+
+    return debit_spend + card_spend + card_fixed_expenses
+
+
+def _suggested_cap_for_category(user, category, ref_date, today):
+    """Suggests a monthly cap based on the category's own real trailing history -
+    averaged over up to 6 months before ref_date, only counting months that
+    actually had spend in this category (so a category used every other month
+    isn't dragged toward zero by the empty months), and skipping the current
+    calendar month since it's still in progress and would understate it."""
+    total = 0
+    months_with_spend = 0
+    for i in range(1, 7):
+        month_date = ref_date - relativedelta(months=i)
+        if month_date.year == today.year and month_date.month == today.month:
+            continue
+        spend = _category_spend_for_month(user, category, month_date.month, month_date.year)
+        if spend > 0:
+            total += spend
+            months_with_spend += 1
+
+    return (total / months_with_spend) if months_with_spend else 0
+
+
 def manage_categories(request):
     month_url = request.GET.get('mes')
     year_url = request.GET.get('ano')
@@ -58,6 +99,19 @@ def manage_categories(request):
     forecast_leftover = total_fixed_income - total_planned
 
     # --- PER-CATEGORY BREAKDOWN (filtered by the selected month) ---
+    raw_suggested_caps = {
+        category.id: float(_suggested_cap_for_category(request.user, category, ref_date, today))
+        for category in categories
+    }
+    # Suggestions are each computed independently from a category's own history, so
+    # nothing stops them from adding up to more than what you actually earn. If they
+    # do, every suggestion is scaled down by the same factor so the total suggested
+    # budget never exceeds the fixed income - a "smart" suggestion has to fit reality.
+    total_raw_suggested = sum(raw_suggested_caps.values())
+    scale_factor = 1.0
+    if total_fixed_income > 0 and total_raw_suggested > float(total_fixed_income):
+        scale_factor = float(total_fixed_income) / total_raw_suggested
+
     categories_with_details = []
     for category in categories:
         # Sums what was already spent in this category for the selected month/year.
@@ -90,14 +144,31 @@ def manage_categories(request):
 
         leftover = category.monthly_cap - total_spend
 
+        # How close this category is to blowing its cap, so the riskiest ones can
+        # float to the top - a reverse_logic (aporte) category has no "risk" in this
+        # sense, so it's always treated as safe and sinks to the bottom instead
+        usage_pct = 0
+        if not category.reverse_logic and category.monthly_cap > 0:
+            usage_pct = min(int((total_spend / category.monthly_cap) * 100), 999)
+
+        suggested_cap = raw_suggested_caps[category.id] * scale_factor
+
         categories_with_details.append({
             'id': category.id,
             'name': category.name,
             'monthly_cap': category.monthly_cap,
             'total_spent': total_spend,
             'leftover': leftover if leftover > 0 else 0,
-            'reverse_logic': category.reverse_logic
+            'reverse_logic': category.reverse_logic,
+            'usage_pct': usage_pct,
+            'usage_pct_width': min(usage_pct, 100),
+            # A suggestion only really means something if it differs meaningfully
+            # from the cap already set - otherwise it's just noise on the screen
+            'suggested_cap': suggested_cap if abs(float(suggested_cap) - float(category.monthly_cap)) > 1 else None,
         })
+
+    # Riskiest first (closest to/over the cap), safe and aporte categories last
+    categories_with_details.sort(key=lambda c: c['usage_pct'], reverse=True)
 
     # Fetches the savings boxes for the "save the leftover" modal
     box_list = SavingsBox.objects.for_user(request.user)
@@ -184,16 +255,18 @@ def category_cards(request):
 
 
 def edit_category(request, id):
-    """Edited via a per-card popup on the Categorias page - if the form is invalid
-    (e.g. duplicate name), falls back to the classic full-page form so the errors
-    are still visible somewhere."""
+    """Edited via a per-card/per-row popup (on both the Categorias page and the
+    Planejamento table) - if the form is invalid (e.g. duplicate name), falls back
+    to the classic full-page form so the errors are still visible somewhere.
+    Redirects back to whichever page the popup was opened from, since this same
+    endpoint now serves two different screens."""
     category = get_owned_or_404(request, Category, id=id)
     # instance=category pre-fills the form with the current data
     form = CategoryForm(request.POST or None, instance=category, user=request.user)
 
     if form.is_valid():
         form.save()
-        return redirect('categorias_cadastro')
+        return redirect(request.META.get('HTTP_REFERER') or 'categorias_cadastro')
 
     if request.method == 'POST':
         return render(request, 'generic_form.html', {
@@ -201,7 +274,7 @@ def edit_category(request, id):
             'title': f'✏️ Editar Categoria: {category.name}'
         })
 
-    return redirect('categorias_cadastro')
+    return redirect(request.META.get('HTTP_REFERER') or 'categorias_cadastro')
 
 
 def recategorize_pending(request):
