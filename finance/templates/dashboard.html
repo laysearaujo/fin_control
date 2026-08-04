@@ -216,19 +216,11 @@
                                     </button>
                                 </li>
                                 <li>
-                                    {% if item.kind == 'one_off' %}
-                                        <a class="dropdown-item rounded-2 small text-danger d-flex align-items-center gap-2 py-2"
-                                           href="{% url 'apagar_conta_avulsa' item.id %}"
-                                           onclick="return confirm('Tem certeza que quer apagar essa conta extra?')">
-                                            <span>🗑️</span> Excluir
-                                        </a>
-                                    {% else %}
-                                        <a class="dropdown-item rounded-2 small text-danger d-flex align-items-center gap-2 py-2"
-                                           href="{% url 'excluir_gasto_fixo' item.id %}"
-                                           onclick="return confirm('ATENÇÃO: Isso vai apagar essa Conta Fixa para TODOS os meses. Continuar?')">
-                                            <span>🗑️</span> Excluir (Recorrente)
-                                        </a>
-                                    {% endif %}
+                                    <button type="button" class="dropdown-item rounded-2 small text-danger d-flex align-items-center gap-2 py-2"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#modalExcluirConta{{ item.id }}">
+                                        <span>🗑️</span> Excluir{% if item.kind != 'one_off' %} (Recorrente){% endif %}
+                                    </button>
                                 </li>
                             </ul>
                         </div>
@@ -337,6 +329,33 @@
                                 </div>
                             </div>
                         {% endif %}
+
+                        <div class="modal fade text-start" id="modalExcluirConta{{ item.id }}" tabindex="-1">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content border-0 shadow">
+                                    <div class="modal-header bg-danger text-white border-0">
+                                        <h5 class="modal-title fw-bold">Excluir Conta?</h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body text-center py-4">
+                                        <h5 class="fw-bold text-dark mb-2">{{ item.name }}</h5>
+                                        {% if item.kind == 'one_off' %}
+                                            <p class="text-muted mb-0">Tem certeza que quer apagar essa conta extra?</p>
+                                        {% else %}
+                                            <p class="text-muted mb-0">⚠️ Isso vai apagar essa conta recorrente para <strong>todos os meses</strong>. Continuar?</p>
+                                        {% endif %}
+                                    </div>
+                                    <div class="modal-footer justify-content-center border-0 pb-4">
+                                        <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                                        {% if item.kind == 'one_off' %}
+                                            <a href="{% url 'apagar_conta_avulsa' item.id %}" class="btn btn-danger rounded-pill px-4 fw-bold">Sim, Apagar</a>
+                                        {% else %}
+                                            <a href="{% url 'excluir_gasto_fixo' item.id %}" class="btn btn-danger rounded-pill px-4 fw-bold">Sim, Apagar</a>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     {% endif %}
                     </div>
                 </div>
@@ -475,11 +494,23 @@
                         </div>
 
                         {% if not card_invoice.paid and not is_past and card_invoice.total > 0 %}
-                        <a href="{% url 'pagar_fatura_mensal' card_invoice.card.id %}?mes={{ ref_date.month }}&ano={{ ref_date.year }}"
-                           class="btn btn-sm btn-success rounded-pill fw-bold px-3"
-                           onclick="return confirm('Confirma o pagamento de R$ {{ card_invoice.total|floatformat:2 }} da fatura do cartão {{ card_invoice.card.name }}? Esse valor será descontado do seu saldo atual.')">
-                            Pagar R$ {{ card_invoice.total|floatformat:2 }}
-                        </a>
+                        <div class="confirma-fatura-wrapper text-end">
+                            <button type="button" class="btn btn-sm btn-success rounded-pill fw-bold px-3 btn-pedir-confirma-fatura">
+                                Pagar R$ {{ card_invoice.total|floatformat:2 }}
+                            </button>
+                            <div class="confirma-fatura-inline d-none mt-2 p-3 bg-light rounded-4 border text-start">
+                                <p class="small text-muted mb-2">
+                                    Confirma o pagamento de <strong class="text-dark">R$ {{ card_invoice.total|floatformat:2 }}</strong> da fatura do <strong>{{ card_invoice.card.name }}</strong>? Esse valor será descontado do seu saldo atual.
+                                </p>
+                                <div class="d-flex gap-2">
+                                    <button type="button" class="btn btn-sm btn-light rounded-pill flex-grow-1 btn-cancelar-confirma-fatura">Cancelar</button>
+                                    <a href="{% url 'pagar_fatura_mensal' card_invoice.card.id %}?mes={{ ref_date.month }}&ano={{ ref_date.year }}"
+                                       class="btn btn-sm btn-success rounded-pill flex-grow-1 fw-bold">
+                                        Sim, Confirmar
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
                         {% endif %}
                     </div>
                 </div>
@@ -613,6 +644,27 @@
                 btnPrivacidade.title = "Ocultar valores";
             }
         }
+    });
+
+    // Inline confirmation for "Pagar Fatura" - a real modal here would be nested
+    // inside the already-open #modalFatura, and Bootstrap doesn't stack modals
+    // properly (the backdrop shows but the second modal never appears on top), so
+    // this shows/hides a confirmation panel in place instead of opening a new modal.
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.confirma-fatura-wrapper').forEach(function (wrapper) {
+            const btnPedir = wrapper.querySelector('.btn-pedir-confirma-fatura');
+            const painelConfirma = wrapper.querySelector('.confirma-fatura-inline');
+            const btnCancelar = wrapper.querySelector('.btn-cancelar-confirma-fatura');
+
+            btnPedir.addEventListener('click', function () {
+                btnPedir.classList.add('d-none');
+                painelConfirma.classList.remove('d-none');
+            });
+            btnCancelar.addEventListener('click', function () {
+                painelConfirma.classList.add('d-none');
+                btnPedir.classList.remove('d-none');
+            });
+        });
     });
 </script>
 

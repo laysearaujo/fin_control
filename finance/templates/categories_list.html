@@ -144,13 +144,13 @@
                                data-bs-toggle="modal" data-bs-target="#modalEditarCategoria{{ cat.id }}">
                                 ✏️
                             </button>
-                            <a href="{% url 'apagar_categoria' cat.id %}"
+                            <button type="button"
                                class="btn btn-sm btn-light text-danger border-0 rounded-circle shadow-sm"
                                style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
                                title="Excluir Categoria"
-                               onclick="return confirm('Tem certeza de que deseja apagar a categoria &quot;{{ cat.name }}&quot;? Os lançamentos antigos perderão este vínculo.')">
+                               data-bs-toggle="modal" data-bs-target="#modalExcluirCategoria{{ cat.id }}">
                                 🗑️
-                            </a>
+                            </button>
                         </div>
                     </td>
                 </tr>
@@ -195,6 +195,25 @@
                     <button type="submit" class="btn btn-dark w-100 rounded-pill fw-bold shadow-sm">Salvar Alterações</button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade text-start" id="modalExcluirCategoria{{ cat.id }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-danger text-white border-0">
+                <h5 class="modal-title fw-bold">Excluir Categoria?</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center py-4">
+                <h5 class="fw-bold text-dark mb-2">{{ cat.name }}</h5>
+                <p class="text-muted mb-0">Os lançamentos antigos perderão o vínculo com essa categoria.</p>
+            </div>
+            <div class="modal-footer justify-content-center border-0 pb-4">
+                <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                <a href="{% url 'apagar_categoria' cat.id %}" class="btn btn-danger rounded-pill px-4 fw-bold">Sim, Apagar</a>
+            </div>
         </div>
     </div>
 </div>
