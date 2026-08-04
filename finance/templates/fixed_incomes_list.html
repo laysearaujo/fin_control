@@ -6,7 +6,7 @@
         <h3 class="fw-bold mb-1">💰 Entradas Fixas (Salários)</h3>
         <p class="text-muted m-0">Valores que entram todo mês automaticamente.</p>
     </div>
-    <a href="{% url 'nova_receita_fixa' %}" class="btn btn-dark fw-bold rounded-pill shadow-sm px-4">+ Novo Salário Fixo</a>
+    <button type="button" class="btn btn-dark fw-bold rounded-pill shadow-sm px-4" data-bs-toggle="modal" data-bs-target="#modalNovaReceitaFixa">+ Novo Salário Fixo</button>
 </div>
 
 <div class="row">
@@ -26,13 +26,13 @@
                         ✏️
                     </button>
 
-                    <a href="{% url 'apagar_receita_fixa' item.id %}"
+                    <button type="button"
                        class="btn btn-sm btn-light text-danger border-0 rounded-circle shadow-sm"
                        style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
                        title="Excluir Salário"
-                       onclick="return confirm('Tem certeza que quer apagar esse salário fixo?')">
+                       data-bs-toggle="modal" data-bs-target="#modalExcluirReceitaFixa{{ item.id }}">
                         🗑️
-                    </a>
+                    </button>
                 </div>
             </div>
 
@@ -85,6 +85,25 @@
             </div>
         </div>
     </div>
+
+    <div class="modal fade text-start" id="modalExcluirReceitaFixa{{ item.id }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-danger text-white border-0">
+                    <h5 class="modal-title fw-bold">Excluir Salário Fixo?</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center py-4">
+                    <h5 class="fw-bold text-dark mb-2">{{ item.description }}</h5>
+                    <p class="text-muted mb-0">Tem certeza que quer apagar esse salário fixo?</p>
+                </div>
+                <div class="modal-footer justify-content-center border-0 pb-4">
+                    <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                    <a href="{% url 'apagar_receita_fixa' item.id %}" class="btn btn-danger rounded-pill px-4 fw-bold">Sim, Apagar</a>
+                </div>
+            </div>
+        </div>
+    </div>
     {% empty %}
     <div class="col-12">
         <div class="alert bg-white text-center py-5 text-muted border-0 shadow-sm rounded-4">
@@ -94,5 +113,36 @@
         </div>
     </div>
     {% endfor %}
+</div>
+
+<div class="modal fade" id="modalNovaReceitaFixa" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
+            <div class="modal-header border-0">
+                <h5 class="modal-title fw-bold">💰 Novo Salário Fixo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{% url 'nova_receita_fixa' %}" method="POST">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-muted small text-uppercase" for="newFixedIncomeDesc">Descrição</label>
+                        <input type="text" id="newFixedIncomeDesc" name="description" class="form-control form-control-lg" placeholder="Ex: Salário Mensal, Aluguel..." required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-muted small text-uppercase" for="newFixedIncomeAmount">Valor (R$)</label>
+                        <input type="number" step="0.01" id="newFixedIncomeAmount" name="amount" class="form-control form-control-lg" required>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label fw-bold text-muted small text-uppercase" for="newFixedIncomeDay">Dia de Recebimento</label>
+                        <input type="number" min="1" max="31" id="newFixedIncomeDay" name="payment_day" class="form-control form-control-lg" required>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="submit" class="btn btn-dark w-100 rounded-pill fw-bold shadow-sm">Salvar Salário Fixo</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 {% endblock %}

@@ -6,7 +6,7 @@
         <h3 class="fw-bold mb-1">🏠 Gastos Recorrentes</h3>
         <p class="text-muted m-0">Contas que todo mês estão lá (Aluguel, Luz, Netflix).</p>
     </div>
-    <a href="{% url 'novo_fixo' %}" class="btn btn-dark fw-bold rounded-pill shadow-sm px-4">+ Nova Conta Fixa</a>
+    <button type="button" class="btn btn-dark fw-bold rounded-pill shadow-sm px-4" data-bs-toggle="modal" data-bs-target="#modalNovoFixo">+ Nova Conta Fixa</button>
 </div>
 
 <div class="row">
@@ -18,33 +18,91 @@
                 <h5 class="fw-bold mb-0 text-dark">{{ item.name }}</h5>
                 
                 <div class="d-flex gap-2">
-                    <a href="{% url 'editar_gasto_fixo' item.id %}" 
-                       class="btn btn-sm btn-light text-primary border-0 rounded-circle shadow-sm" 
-                       style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;" 
-                       title="Editar Conta">
+                    <button type="button"
+                       class="btn btn-sm btn-light text-primary border-0 rounded-circle shadow-sm"
+                       style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
+                       title="Editar Conta"
+                       data-bs-toggle="modal" data-bs-target="#modalEditarFixoCadastro{{ item.id }}">
                         ✏️
-                    </a>
+                    </button>
                     
-                    <a href="{% url 'apagar_fixo' item.id %}" 
-                       class="btn btn-sm btn-light text-danger border-0 rounded-circle shadow-sm" 
-                       style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;" 
-                       title="Excluir Conta" 
-                       onclick="return confirm('ATENÇÃO: Isso removerá a previsão dessa conta para TODOS os meses. Continuar?')">
+                    <button type="button"
+                       class="btn btn-sm btn-light text-danger border-0 rounded-circle shadow-sm"
+                       style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;"
+                       title="Excluir Conta"
+                       data-bs-toggle="modal" data-bs-target="#modalExcluirFixo{{ item.id }}">
                         🗑️
-                    </a>
+                    </button>
                 </div>
             </div>
-            
+
             <h3 class="fw-bold text-dark m-0">R$ {{ item.expected_amount|floatformat:2 }}</h3>
-            
+
             <div class="d-flex justify-content-between align-items-center mt-3 pt-2">
                 <small class="text-muted">Vence todo dia <strong class="text-dark">{{ item.due_day }}</strong></small>
-                
+
                 {% if item.is_credit_card %}
                     <span class="badge bg-warning bg-opacity-25 text-dark border border-warning rounded-pill px-2 py-1"><small>💳 No Cartão</small></span>
                 {% endif %}
             </div>
 
+        </div>
+    </div>
+
+    <div class="modal fade text-start" id="modalEditarFixoCadastro{{ item.id }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow rounded-4">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title fw-bold">✏️ Editar Conta Fixa</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form action="{% url 'editar_gasto_fixo' item.id %}" method="POST">
+                    {% csrf_token %}
+                    <div class="modal-body">
+                        {% if item.edit_form.is_credit_card %}
+                            <div class="mb-3 toggle-card">
+                                <div class="form-check form-switch">
+                                    {{ item.edit_form.is_credit_card }}
+                                    <label class="form-check-label" for="{{ item.edit_form.is_credit_card.id_for_label }}">
+                                        <span class="toggle-title text-primary">💳 Pago com Cartão de Crédito?</span>
+                                    </label>
+                                </div>
+                            </div>
+                        {% endif %}
+                        {% for field in item.edit_form %}
+                            {% if field.name != 'is_credit_card' %}
+                                <div class="mb-3" id="edit_fixo_{{ item.id }}_div_{{ field.name }}">
+                                    <label class="form-label fw-bold text-muted small text-uppercase">{{ field.label }}</label>
+                                    {{ field }}
+                                    {% if field.errors %}<div class="text-danger small fw-bold">{{ field.errors }}</div>{% endif %}
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    <div class="modal-footer border-0">
+                        <button type="submit" class="btn btn-dark w-100 rounded-pill fw-bold shadow-sm">Salvar Alterações</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade text-start" id="modalExcluirFixo{{ item.id }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-danger text-white border-0">
+                    <h5 class="modal-title fw-bold">Excluir Conta Fixa?</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center py-4">
+                    <h5 class="fw-bold text-dark mb-2">{{ item.name }}</h5>
+                    <p class="text-muted mb-0">⚠️ Isso removerá a previsão dessa conta para <strong>todos os meses</strong>. Continuar?</p>
+                </div>
+                <div class="modal-footer justify-content-center border-0 pb-4">
+                    <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                    <a href="{% url 'apagar_fixo' item.id %}" class="btn btn-danger rounded-pill px-4 fw-bold">Sim, Apagar</a>
+                </div>
+            </div>
         </div>
     </div>
     {% empty %}
@@ -57,4 +115,53 @@
     </div>
     {% endfor %}
 </div>
+
+<div class="modal fade text-start" id="modalNovoFixo" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
+            <div class="modal-header border-0">
+                <h5 class="modal-title fw-bold">🏠 Nova Conta Fixa</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{% url 'novo_fixo' %}" method="POST">
+                {% csrf_token %}
+                <div class="modal-body">
+                    {% if new_form.is_credit_card %}
+                        <div class="mb-3 toggle-card">
+                            <div class="form-check form-switch">
+                                {{ new_form.is_credit_card }}
+                                <label class="form-check-label" for="{{ new_form.is_credit_card.id_for_label }}">
+                                    <span class="toggle-title text-primary">💳 Pago com Cartão de Crédito?</span>
+                                </label>
+                            </div>
+                        </div>
+                    {% endif %}
+                    {% for field in new_form %}
+                        {% if field.name != 'is_credit_card' %}
+                            <div class="mb-3" id="new_fixo_div_{{ field.name }}">
+                                <label class="form-label fw-bold text-muted small text-uppercase">{{ field.label }}</label>
+                                {{ field }}
+                                {% if field.errors %}<div class="text-danger small fw-bold">{{ field.errors }}</div>{% endif %}
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="submit" class="btn btn-dark w-100 rounded-pill fw-bold shadow-sm">Salvar Conta Fixa</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        wireUpCartaoToggle('new_fixo_');
+        wireUpCaixinhaDestino('new_fixo_');
+        {% for item in expenses %}
+        wireUpCartaoToggle('edit_fixo_{{ item.id }}_');
+        wireUpCaixinhaDestino('edit_fixo_{{ item.id }}_');
+        {% endfor %}
+    });
+</script>
 {% endblock %}

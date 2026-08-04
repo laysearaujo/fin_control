@@ -7,8 +7,8 @@
         <p class="text-muted">Patrimônio Total Guardado: <strong class="text-success">R$ {{ total|floatformat:2 }}</strong></p>
     </div>
     <div>
-        <a href="{% url 'nova_caixinha' %}" class="btn btn-success">+ Nova Caixinha</a>
-        <a href="{% url 'novo_emprestimo_proprio' %}" class="btn btn-warning">💸 Auto-Empréstimo</a>
+        <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalNovaCaixinha">+ Nova Caixinha</button>
+        <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#modalNovoEmprestimo">💸 Auto-Empréstimo</button>
         <a href="{% url 'resgatar_caixinha' %}" class="btn btn-danger">💸 Resgatar</a>
     </div>
 </div>
@@ -47,18 +47,17 @@
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end border-0 shadow rounded-3 p-2">
                         <li>
-                            <a class="dropdown-item rounded-2 small d-flex align-items-center gap-2 py-2" 
-                               href="{% url 'editar_caixinha' box.id %}">
+                            <button type="button" class="dropdown-item rounded-2 small d-flex align-items-center gap-2 py-2"
+                                    data-bs-toggle="modal" data-bs-target="#modalEditarCaixinha{{ box.id }}">
                                 <span>✏️</span> Editar Configurações
-                            </a>
+                            </button>
                         </li>
                         <li><hr class="dropdown-divider"></li>
                         <li>
-                            <a class="dropdown-item rounded-2 small text-danger d-flex align-items-center gap-2 py-2" 
-                               href="{% url 'apagar_caixinha' box.id %}"
-                               onclick="return confirm('Tem certeza que deseja apagar a caixinha &quot;{{ box.name }}&quot;? Todo o saldo virtual dela será perdido!')">
+                            <button type="button" class="dropdown-item rounded-2 small text-danger d-flex align-items-center gap-2 py-2"
+                                    data-bs-toggle="modal" data-bs-target="#modalExcluirCaixinha{{ box.id }}">
                                 <span>🗑️</span> Excluir Caixinha
-                            </a>
+                            </button>
                         </li>
                     </ul>
                 </div>
@@ -120,13 +119,132 @@
             </form>
         </div>
     </div>
+
+    <div class="modal fade text-start" id="modalEditarCaixinha{{ box.id }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow rounded-4">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title fw-bold">✏️ Editar Caixinha</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form action="{% url 'editar_caixinha' box.id %}" method="POST">
+                    {% csrf_token %}
+                    <div class="modal-body">
+                        {% for field in box.edit_form %}
+                            {% if field.name == 'is_emergency_reserve' %}
+                                <div class="mb-3 toggle-card toggle-card-success">
+                                    <div class="form-check form-switch">
+                                        {{ field }}
+                                        <label class="form-check-label" for="{{ field.id_for_label }}">
+                                            <span class="toggle-title text-success">🛡️ {{ field.label }}</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold text-muted small text-uppercase">{{ field.label }}</label>
+                                    {{ field }}
+                                    {% if field.errors %}<div class="text-danger small fw-bold">{{ field.errors }}</div>{% endif %}
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    <div class="modal-footer border-0">
+                        <button type="submit" class="btn btn-dark w-100 rounded-pill fw-bold shadow-sm">Salvar Alterações</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade text-start" id="modalExcluirCaixinha{{ box.id }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-danger text-white border-0">
+                    <h5 class="modal-title fw-bold">Excluir Caixinha?</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center py-4">
+                    <h5 class="fw-bold text-dark mb-2">{{ box.name }}</h5>
+                    <p class="text-muted mb-0">⚠️ Todo o saldo virtual dela será perdido! Tem certeza?</p>
+                </div>
+                <div class="modal-footer justify-content-center border-0 pb-4">
+                    <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                    <a href="{% url 'apagar_caixinha' box.id %}" class="btn btn-danger rounded-pill px-4 fw-bold">Sim, Apagar</a>
+                </div>
+            </div>
+        </div>
+    </div>
     {% empty %}
     <div class="col-12 text-center py-5">
         <h4 class="text-muted">Nenhuma caixinha criada ainda.</h4>
         <p class="text-muted">Crie sua Reserva de Emergência ou meta de viagem.</p>
-        <a href="{% url 'nova_caixinha' %}" class="btn btn-outline-success mt-3">Começar a Guardar</a>
+        <button type="button" class="btn btn-outline-success mt-3" data-bs-toggle="modal" data-bs-target="#modalNovaCaixinha">Começar a Guardar</button>
     </div>
     {% endfor %}
+</div>
+
+<div class="modal fade text-start" id="modalNovaCaixinha" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
+            <div class="modal-header border-0">
+                <h5 class="modal-title fw-bold">💰 Nova Caixinha</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{% url 'nova_caixinha' %}" method="POST">
+                {% csrf_token %}
+                <div class="modal-body">
+                    {% for field in new_form %}
+                        {% if field.name == 'is_emergency_reserve' %}
+                            <div class="mb-3 toggle-card toggle-card-success">
+                                <div class="form-check form-switch">
+                                    {{ field }}
+                                    <label class="form-check-label" for="{{ field.id_for_label }}">
+                                        <span class="toggle-title text-success">🛡️ {{ field.label }}</span>
+                                    </label>
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="mb-3">
+                                <label class="form-label fw-bold text-muted small text-uppercase">{{ field.label }}</label>
+                                {{ field }}
+                                {% if field.errors %}<div class="text-danger small fw-bold">{{ field.errors }}</div>{% endif %}
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="submit" class="btn btn-dark w-100 rounded-pill fw-bold shadow-sm">Salvar Caixinha</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade text-start" id="modalNovoEmprestimo" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
+            <div class="modal-header border-0">
+                <h5 class="modal-title fw-bold">💸 Empréstimo de Mim Mesmo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{% url 'novo_emprestimo_proprio' %}" method="POST">
+                {% csrf_token %}
+                <div class="modal-body">
+                    {% for field in loan_form %}
+                        <div class="mb-3">
+                            <label class="form-label fw-bold text-muted small text-uppercase">{{ field.label }}</label>
+                            {{ field }}
+                            {% if field.errors %}<div class="text-danger small fw-bold">{{ field.errors }}</div>{% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="submit" class="btn btn-warning w-100 rounded-pill fw-bold shadow-sm text-dark">Pegar Empréstimo</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 
 <style>

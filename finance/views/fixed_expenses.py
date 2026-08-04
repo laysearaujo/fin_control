@@ -10,7 +10,13 @@ from ._helpers import get_owned_or_404
 
 def manage_fixed_expenses(request):
     expenses = FixedExpense.objects.for_user(request.user)
-    return render(request, 'fixed_expenses_list.html', {'expenses': expenses})
+    for expense in expenses:
+        # Unique auto_id per row so N per-item edit popups on the same page never
+        # collide on the same field ids (same trick used for the Extrato's popups)
+        expense.edit_form = FixedExpenseForm(instance=expense, user=request.user, auto_id=f'edit_fixo_{expense.id}_%s')
+
+    new_form = FixedExpenseForm(user=request.user, auto_id='new_fixo_%s')
+    return render(request, 'fixed_expenses_list.html', {'expenses': expenses, 'new_form': new_form})
 
 
 def new_fixed_expense(request):
@@ -20,6 +26,8 @@ def new_fixed_expense(request):
         expense.owner = request.user
         expense.save()
         return redirect('gerenciar_fixos')
+    # Invalid popup submission falls back to the classic full-page form so the
+    # validation errors are still visible somewhere
     return render(request, 'generic_form.html', {'form': form, 'title': '🏠 Novo Gasto Recorrente'})
 
 

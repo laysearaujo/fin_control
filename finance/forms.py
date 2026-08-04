@@ -74,7 +74,7 @@ class FixedExpenseForm(BootstrapModelForm):
              'due_day': forms.NumberInput(attrs={'max': 31, 'min': 1}),
              'category': forms.Select(attrs={'class': 'form-select'}),
              'is_credit_card': forms.CheckboxInput(attrs={'class': 'form-check-input', 'role': 'switch'}),
-             'credit_card': forms.Select(attrs={'class': 'form-select', 'id': 'campo_cartao'}),
+             'credit_card': forms.Select(attrs={'class': 'form-select'}),
              'target_savings_box': forms.Select(attrs={'class': 'form-select'}),
         }
 

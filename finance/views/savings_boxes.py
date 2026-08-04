@@ -63,8 +63,15 @@ def savings_boxes(request):
         box.yield_30_days = windowed['yield_30_days']
         box.yield_12_months = windowed['yield_12_months']
         box.is_younger_than_12_months = windowed['is_younger_than_12_months']
+        # Unique auto_id per row so N per-box edit popups on the same page never
+        # collide on the same field ids
+        box.edit_form = SavingsBoxEditForm(instance=box, auto_id=f'edit_caixinha_{box.id}_%s')
 
-    return render(request, 'savings_boxes.html', {'boxes': box_list, 'total': total_saved})
+    new_form = SavingsBoxForm(auto_id='new_caixinha_%s')
+    loan_form = SelfLoanForm(user=request.user, auto_id='new_emprestimo_%s')
+    return render(request, 'savings_boxes.html', {
+        'boxes': box_list, 'total': total_saved, 'new_form': new_form, 'loan_form': loan_form,
+    })
 
 
 def new_savings_box(request):
@@ -74,19 +81,23 @@ def new_savings_box(request):
         box.owner = request.user
         box.save()
         return redirect('caixinhas')
+    # Invalid popup submission falls back to the classic full-page form so the
+    # validation errors are still visible somewhere
     return render(request, 'generic_form.html', {'form': form, 'title': '💰 Nova Caixinha'})
 
 
 def edit_savings_box(request, id):
     """Allows changing a savings box's settings and goals (not its balance - that's
-    handled separately by 'Atualizar valor hoje', which logs the change as yield)"""
+    handled separately by 'Atualizar valor hoje', which logs the change as yield).
+    Now a popup on both the Caixinhas list and the box's own detail page, so it
+    redirects back to wherever it was opened from instead of always the list."""
     box = get_owned_or_404(request, SavingsBox, id=id)
     # instance=box pre-fills the generic form with the existing data
     form = SavingsBoxEditForm(request.POST or None, instance=box)
 
     if form.is_valid():
         form.save()
-        return redirect('caixinhas')
+        return redirect(request.META.get('HTTP_REFERER') or 'caixinhas')
 
     return render(request, 'generic_form.html', {
         'form': form,
@@ -181,6 +192,8 @@ def savings_box_detail(request, id):
 
     context = {
         'box': box,
+        'edit_form': SavingsBoxEditForm(instance=box),
+        'loan_form': SelfLoanForm(initial={'source_savings_box': box.id}, user=request.user, auto_id='new_emprestimo_%s'),
         'history': history,
         'amount_left_for_goal': amount_left_for_goal,
         'goal_percentage': goal_percentage,
@@ -297,6 +310,10 @@ def new_self_loan(request):
         )
         # Note: removing this fixed expense after N installments still needs to be built
 
-        return redirect('caixinhas')
+        # Popup on both Caixinhas and the box's own detail page - back to wherever
+        # it was opened from
+        return redirect(request.META.get('HTTP_REFERER') or 'caixinhas')
 
+    # Invalid popup submission falls back to the classic full-page form so the
+    # validation errors are still visible somewhere
     return render(request, 'generic_form.html', {'form': form, 'title': '💸 Empréstimo de Mim Mesmo'})

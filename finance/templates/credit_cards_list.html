@@ -6,7 +6,7 @@
         <h3 class="fw-bold mb-1">💳 Meus Cartões</h3>
         <p class="text-muted m-0">Gerencie seus limites, vencimentos e datas de fechamento.</p>
     </div>
-    <a href="{% url 'novo_cartao' %}" class="btn btn-dark fw-bold rounded-pill shadow-sm px-4">+ Novo Cartão</a>
+    <button type="button" class="btn btn-dark fw-bold rounded-pill shadow-sm px-4" data-bs-toggle="modal" data-bs-target="#modalNovoCartao">+ Novo Cartão</button>
 </div>
 
 <div class="row">
@@ -21,33 +21,90 @@
                 </div>
                 
                 <div class="d-flex gap-2">
-                    <a href="{% url 'editar_cartao' card.id %}" 
-                       class="btn btn-sm btn-light bg-opacity-25 text-white border-0 rounded-circle" 
-                       style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(5px);" 
-                       title="Editar Cartão">
+                    <button type="button"
+                       class="btn btn-sm btn-light bg-opacity-25 text-white border-0 rounded-circle"
+                       style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(5px);"
+                       title="Editar Cartão"
+                       data-bs-toggle="modal" data-bs-target="#modalEditarCartao{{ card.id }}">
                         ✏️
-                    </a>
+                    </button>
                     
-                    <a href="{% url 'apagar_cartao' card.id %}" 
-                       class="btn btn-sm btn-light bg-opacity-25 text-white border-0 rounded-circle" 
-                       style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(5px);" 
-                       title="Excluir Cartão" 
-                       onclick="return confirm('ATENÇÃO: Apagar este cartão pode afetar o cálculo de faturas passadas. Tem certeza?')">
+                    <button type="button"
+                       class="btn btn-sm btn-light bg-opacity-25 text-white border-0 rounded-circle"
+                       style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(5px);"
+                       title="Excluir Cartão"
+                       data-bs-toggle="modal" data-bs-target="#modalExcluirCartao{{ card.id }}">
                         🗑️
-                    </a>
+                    </button>
                 </div>
             </div>
-            
+
             <div class="mt-auto">
                 <small class="d-block fw-bold text-uppercase" style="opacity: 0.7; font-size: 0.75rem;">LIMITE TOTAL</small>
                 <h3 class="fw-bold mb-3">R$ {{ card.limit|floatformat:2 }}</h3>
-                
+
                 <div class="d-flex justify-content-between mt-3 pt-3 border-top border-light border-opacity-25 small fw-bold" style="opacity: 0.9;">
                     <span>Fecha dia: {{ card.closing_day }}</span>
                     <span>Vence dia: {{ card.due_day }}</span>
                 </div>
             </div>
-            
+
+        </div>
+    </div>
+
+    <div class="modal fade text-start" id="modalEditarCartao{{ card.id }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow rounded-4">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title fw-bold">✏️ Editar Cartão</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form action="{% url 'editar_cartao' card.id %}" method="POST">
+                    {% csrf_token %}
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold text-muted small text-uppercase" for="cardName{{ card.id }}">Nome</label>
+                            <input type="text" id="cardName{{ card.id }}" name="name" class="form-control form-control-lg" value="{{ card.name }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold text-muted small text-uppercase" for="cardLimit{{ card.id }}">Limite (R$)</label>
+                            <input type="number" step="0.01" id="cardLimit{{ card.id }}" name="limit" class="form-control form-control-lg" value="{{ card.limit|stringformat:'.2f' }}" required>
+                        </div>
+                        <div class="row">
+                            <div class="col-6 mb-4">
+                                <label class="form-label fw-bold text-muted small text-uppercase" for="cardClosing{{ card.id }}">Dia Fechamento</label>
+                                <input type="number" min="1" max="31" id="cardClosing{{ card.id }}" name="closing_day" class="form-control form-control-lg" value="{{ card.closing_day }}" required>
+                            </div>
+                            <div class="col-6 mb-4">
+                                <label class="form-label fw-bold text-muted small text-uppercase" for="cardDue{{ card.id }}">Dia Vencimento</label>
+                                <input type="number" min="1" max="31" id="cardDue{{ card.id }}" name="due_day" class="form-control form-control-lg" value="{{ card.due_day }}" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-0">
+                        <button type="submit" class="btn btn-dark w-100 rounded-pill fw-bold shadow-sm">Salvar Alterações</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade text-start" id="modalExcluirCartao{{ card.id }}" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-danger text-white border-0">
+                    <h5 class="modal-title fw-bold">Excluir Cartão?</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center py-4">
+                    <h5 class="fw-bold text-dark mb-2">{{ card.name }}</h5>
+                    <p class="text-muted mb-0">⚠️ Apagar este cartão pode afetar o cálculo de faturas passadas. Tem certeza?</p>
+                </div>
+                <div class="modal-footer justify-content-center border-0 pb-4">
+                    <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                    <a href="{% url 'apagar_cartao' card.id %}" class="btn btn-danger rounded-pill px-4 fw-bold">Sim, Apagar</a>
+                </div>
+            </div>
         </div>
     </div>
     {% empty %}
@@ -59,5 +116,42 @@
         </div>
     </div>
     {% endfor %}
+</div>
+
+<div class="modal fade" id="modalNovoCartao" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
+            <div class="modal-header border-0">
+                <h5 class="modal-title fw-bold">💳 Novo Cartão</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{% url 'novo_cartao' %}" method="POST">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-muted small text-uppercase" for="newCardName">Nome</label>
+                        <input type="text" id="newCardName" name="name" class="form-control form-control-lg" placeholder="Ex: Nubank, Visa..." required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-muted small text-uppercase" for="newCardLimit">Limite (R$)</label>
+                        <input type="number" step="0.01" id="newCardLimit" name="limit" class="form-control form-control-lg" required>
+                    </div>
+                    <div class="row">
+                        <div class="col-6 mb-4">
+                            <label class="form-label fw-bold text-muted small text-uppercase" for="newCardClosing">Dia Fechamento</label>
+                            <input type="number" min="1" max="31" id="newCardClosing" name="closing_day" class="form-control form-control-lg" required>
+                        </div>
+                        <div class="col-6 mb-4">
+                            <label class="form-label fw-bold text-muted small text-uppercase" for="newCardDue">Dia Vencimento</label>
+                            <input type="number" min="1" max="31" id="newCardDue" name="due_day" class="form-control form-control-lg" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="submit" class="btn btn-dark w-100 rounded-pill fw-bold shadow-sm">Salvar Cartão</button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 {% endblock %}
