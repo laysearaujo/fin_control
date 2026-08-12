@@ -1,84 +1,94 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="container py-4" style="max-width: 600px;">
-    <div class="card border-0 shadow-lg rounded-4 p-4 bg-white">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h4 class="fw-bold text-dark m-0">Resgatar Dinheiro de Caixinha</h4>
-            <a href="{% url 'caixinhas' %}" class="btn-close"></a>
+<div class="container-fluid py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            
+            <!-- Botão de voltar dinâmico -->
+            {% if hide_box_select %}
+                <a href="javascript:history.back()" class="btn btn-sm btn-light border rounded-pill px-3 mb-3">
+                    ⬅️ Voltar para a Caixinha
+                </a>
+            {% else %}
+                <a href="{% url 'caixinhas' %}" class="btn btn-sm btn-light border rounded-pill px-3 mb-3">
+                    ⬅️ Voltar para Caixinhas
+                </a>
+            {% endif %}
+            
+            <div class="card border-0 shadow-sm rounded-4 bg-white p-4">
+                <h3 class="fw-bold mb-3">💸 Resgatar Dinheiro</h3>
+                <hr class="text-muted mb-4">
+
+                <form method="POST">
+                    {% csrf_token %}
+                    
+                    <!-- AQUI ENTRA O CAMPO DA CAIXINHA (Escondido ou Visível) -->
+                    <div class="mb-4 {% if hide_box_select %}d-none{% endif %}">
+                        <label class="form-label fw-bold text-muted small text-uppercase">{{ form.source_savings_box.label }}</label>
+                        {{ form.source_savings_box }}
+                        {% if form.source_savings_box.errors %}<div class="text-danger small fw-bold mt-1">{{ form.source_savings_box.errors }}</div>{% endif %}
+                    </div>
+
+                    <!-- CAMPO DE VALOR -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold text-muted small text-uppercase">{{ form.amount.label }}</label>
+                        {{ form.amount }}
+                        {% if form.amount.errors %}<div class="text-danger small fw-bold mt-1">{{ form.amount.errors }}</div>{% endif %}
+                    </div>
+                    
+                    <!-- CAMPO DE DESTINO DO DINHEIRO -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold text-muted small text-uppercase mb-2">Para onde vai o dinheiro?</label>
+                        <div class="d-flex flex-column gap-2">
+                            {% for radio in form.destination %}
+                                <div class="form-check p-3 border rounded-3 {% if forloop.first %}bg-light{% endif %}" onclick="document.getElementById('{{ radio.id_for_label }}').click();">
+                                    {{ radio.tag }}
+                                    <label class="form-check-label fw-bold ms-2" for="{{ radio.id_for_label }}" style="cursor: pointer;">
+                                        {{ radio.choice_label }}
+                                    </label>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- CAMPOS DA DÍVIDA (Escondidos por padrão) -->
+                    <div id="divida-fields" class="bg-light p-3 border rounded-3 mb-4" style="display: none;">
+                        <h6 class="fw-bold mb-3 text-danger">🧾 Detalhes da Despesa a Pagar</h6>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold text-muted small text-uppercase">{{ form.expense_description.label }}</label>
+                            {{ form.expense_description }}
+                            {% if form.expense_description.errors %}<div class="text-danger small fw-bold mt-1">{{ form.expense_description.errors }}</div>{% endif %}
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label fw-bold text-muted small text-uppercase">{{ form.expense_category.label }}</label>
+                            {{ form.expense_category }}
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 btn-lg rounded-pill fw-bold shadow-sm">Confirmar Resgate</button>
+                </form>
+            </div>
         </div>
-
-        <form method="POST" action="{% url 'resgatar_caixinha' %}">
-            {% csrf_token %}
-            <input type="hidden" name="zerar_tudo" id="zerar_tudo" value="false">
-
-            <!-- Seleção da Caixinha -->
-            <div class="mb-3">
-                <label class="form-label fw-bold text-secondary">De qual caixinha você vai retirar?</label>
-                <select name="caixinha_id" id="select_caixinha" class="form-select form-select-lg fw-bold" required onchange="atualizarSaldo()">
-                    <option value="" selected disabled>Escolha a caixinha...</option>
-                    {% for c in boxes %}
-                        <option value="{{ c.id }}" data-saldo="{{ c.current_balance }}">
-                            🐖 {{ c.name }} (Saldo: R$ {{ c.current_balance|floatformat:2 }})
-                        </option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <!-- Botão de Atalho para Zerar -->
-            <div class="mb-3 text-end d-none" id="div_zerar">
-                <button type="button" class="btn btn-outline-danger btn-sm rounded-pill fw-bold" onclick="zerarTudo()">
-                    Resgatar Tudo (Zerar Saldo)
-                </button>
-            </div>
-
-            <!-- Campo de Valor -->
-            <div class="mb-3">
-                <label class="form-label fw-bold text-secondary">Valor do Resgate (R$)</label>
-                <input type="number" step="0.01" name="valor" id="campo_valor" class="form-control form-control-lg fw-bold text-dark" placeholder="0.00" required>
-            </div>
-
-            <!-- Categoria do Gasto -->
-            <div class="mb-3">
-                <label class="form-label fw-bold text-secondary">Para qual categoria foi esse gasto?</label>
-                <select name="categoria" class="form-select" required>
-                    <option value="" selected disabled>Selecione onde o dinheiro foi usado...</option>
-                    {% for cat in categories %}
-                        <option value="{{ cat.id }}">{{ cat.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <!-- Motivo/Descrição -->
-            <div class="mb-4">
-                <label class="form-label fw-bold text-secondary">Motivo / Detalhes (Opcional)</label>
-                <input type="text" name="descricao" class="form-control" placeholder="Ex: Conserto do carro, Emergência médica...">
-            </div>
-
-            <div class="d-grid gap-2">
-                <button type="submit" class="btn btn-danger btn-lg rounded-3 fw-bold">Confirmar Resgate</button>
-                <a href="{% url 'caixinhas' %}" class="btn btn-light rounded-3">Cancelar</a>
-            </div>
-        </form>
     </div>
 </div>
 
 <script>
-    let saldoAtualSelecionado = 0;
+    document.addEventListener("DOMContentLoaded", function() {
+        const dividaFields = document.getElementById("divida-fields");
+        const radios = document.querySelectorAll('input[name="destination"]');
 
-    function atualizarSaldo() {
-        const select = document.getElementById('select_caixinha');
-        const option = select.options[select.selectedIndex];
-        saldoAtualSelecionado = parseFloat(option.getAttribute('data-saldo') || 0);
-        
-        document.getElementById('campo_valor').max = saldoAtualSelecionado;
-        document.getElementById('div_zerar').classList.remove('d-none');
-        document.getElementById('zerar_tudo').value = "false";
-    }
+        function toggleDividaFields() {
+            let selectedValue = document.querySelector('input[name="destination"]:checked')?.value;
+            document.querySelectorAll('.form-check').forEach(el => el.classList.remove('bg-light'));
+            let checkedRadio = document.querySelector('input[name="destination"]:checked');
+            if(checkedRadio) checkedRadio.closest('.form-check').classList.add('bg-light');
 
-    function zerarTudo() {
-        document.getElementById('campo_valor').value = saldoAtualSelecionado.toFixed(2);
-        document.getElementById('zerar_tudo').value = "true";
-    }
+            dividaFields.style.display = selectedValue === 'DIVIDA' ? 'block' : 'none';
+        }
+
+        radios.forEach(radio => radio.addEventListener('change', toggleDividaFields));
+        toggleDividaFields(); 
+    });
 </script>
 {% endblock %}

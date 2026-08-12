@@ -22,11 +22,8 @@
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
             <span class="fw-bold text-secondary ps-2">⚡ Ações Rápidas nesta Caixinha:</span>
             <div class="d-flex gap-2">
-                <a href="{% url 'resgatar_caixinha' %}" class="btn btn-outline-danger fw-bold rounded-pill px-3">
-                    Resgatar Dinheiro
-                </a>
-                <button type="button" class="btn btn-warning fw-bold rounded-pill px-3 text-dark" data-bs-toggle="modal" data-bs-target="#modalNovoEmprestimo">
-                    💸 Auto-Empréstimo
+                <button type="button" class="btn btn-outline-danger fw-bold rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#modalResgate">
+                    💸 Resgatar Dinheiro
                 </button>
                 <button type="button" class="btn btn-light border rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#modalEditarCaixinha">
                     ⚙️ Editar Caixinha
@@ -217,32 +214,6 @@
     </div>
 </div>
 
-<div class="modal fade text-start" id="modalNovoEmprestimo" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow rounded-4">
-            <div class="modal-header border-0">
-                <h5 class="modal-title fw-bold">💸 Empréstimo de Mim Mesmo</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form action="{% url 'novo_emprestimo_proprio' %}" method="POST">
-                {% csrf_token %}
-                <div class="modal-body">
-                    {% for field in loan_form %}
-                        <div class="mb-3">
-                            <label class="form-label fw-bold text-muted small text-uppercase">{{ field.label }}</label>
-                            {{ field }}
-                            {% if field.errors %}<div class="text-danger small fw-bold">{{ field.errors }}</div>{% endif %}
-                        </div>
-                    {% endfor %}
-                </div>
-                <div class="modal-footer border-0">
-                    <button type="submit" class="btn btn-warning w-100 rounded-pill fw-bold shadow-sm text-dark">Pegar Empréstimo</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
     const ctx = document.getElementById('graficoEvolucao');
@@ -275,6 +246,87 @@
             },
             scales: { y: { beginAtZero: false } }
         }
+    });
+</script>
+
+<!-- MODAL DE RESGATE UNIVERSAL -->
+<div class="modal fade text-start" id="modalResgate" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4">
+            <div class="modal-header border-0">
+                <h5 class="modal-title fw-bold">💸 Resgatar Dinheiro</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{% url 'resgatar_caixinha' %}" method="POST">
+                {% csrf_token %}
+                <div class="modal-body">
+                    
+                    <!-- SELECT CAIXINHA (Esconde automaticamente se estiver na tela de Detalhes) -->
+                    <div class="mb-3 {% if box %}d-none{% endif %}">
+                        <label class="form-label fw-bold text-muted small text-uppercase">De qual Caixinha?</label>
+                        {{ withdraw_form.source_savings_box }}
+                    </div>
+                    
+                    <!-- VALOR -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-muted small text-uppercase">Valor do Resgate (R$)</label>
+                        {{ withdraw_form.amount }}
+                    </div>
+
+                    <!-- BOTÕES DE DESTINO (Nativos e no alinhamento correto) -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-muted small text-uppercase mb-2">Para onde vai o dinheiro?</label>
+                        <div class="row g-2">
+                            {% for radio in withdraw_form.destination %}
+                            <div class="col-6">
+                                <input type="radio" class="btn-check destination-radio-modal" name="{{ withdraw_form.destination.name }}" id="{{ radio.id_for_label }}_modal" value="{{ radio.data.value }}" {% if radio.data.selected %}checked{% endif %}>
+                                <label class="btn btn-outline-primary w-100 p-2 rounded-3 text-center" for="{{ radio.id_for_label }}_modal">
+                                    <span class="fw-bold small">{% if radio.data.value == 'SALDO' %}🏦 Saldo{% else %}🧾 Dívida{% endif %}</span>
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- DETALHES DA DÍVIDA -->
+                    <div id="divida-fields-modal" class="bg-light p-3 border rounded-3 mb-2" style="display: none;">
+                        <h6 class="fw-bold mb-3 text-danger small">🧾 Detalhes da Despesa</h6>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold text-muted small text-uppercase">{{ withdraw_form.expense_description.label }}</label>
+                            {{ withdraw_form.expense_description }}
+                        </div>
+                        <div>
+                            <label class="form-label fw-bold text-muted small text-uppercase">{{ withdraw_form.expense_category.label }}</label>
+                            {{ withdraw_form.expense_category }}
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="submit" class="btn btn-danger w-100 rounded-pill fw-bold shadow-sm">Confirmar Resgate</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const dividaFieldsModal = document.getElementById("divida-fields-modal");
+        const radiosModal = document.querySelectorAll('.destination-radio-modal');
+
+        function toggleDividaFieldsModal() {
+            let selectedValue = document.querySelector('.destination-radio-modal:checked')?.value;
+            if (selectedValue === 'DIVIDA') {
+                dividaFieldsModal.style.display = 'block';
+            } else {
+                dividaFieldsModal.style.display = 'none';
+            }
+        }
+
+        radiosModal.forEach(radio => radio.addEventListener('change', toggleDividaFieldsModal));
+        // Chama no início para garantir o estado correto
+        toggleDividaFieldsModal(); 
     });
 </script>
 {% endblock %}

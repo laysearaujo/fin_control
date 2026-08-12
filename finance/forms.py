@@ -1,5 +1,5 @@
 from django import forms
-from .models import Transaction, Income, CreditCard, Category, FixedExpense, FixedIncome, SavingsBox, SelfLoan, OwnedModel
+from .models import Transaction, Income, CreditCard, Category, FixedExpense, FixedIncome, SavingsBox, OwnedModel
 
 # Estilo padrão para todos os inputs ficarem bonitos
 class BootstrapModelForm(forms.ModelForm):
@@ -115,7 +115,61 @@ class SavingsBoxEditForm(SavingsBoxForm):
     class Meta(SavingsBoxForm.Meta):
         fields = ['name', 'description', 'cdi_target_pct', 'target_amount', 'is_emergency_reserve']
 
-class SelfLoanForm(BootstrapModelForm):
-    class Meta:
-        model = SelfLoan
-        fields = ['source_savings_box', 'borrowed_amount', 'monthly_interest_pct', 'installments_count', 'start_date']
+class WithdrawSavingsBoxForm(forms.Form):
+    # AQUI ESTÁ O CAMPO QUE ESTAVA FALTANDO APARECER!
+    source_savings_box = forms.ModelChoiceField(
+        queryset=SavingsBox.objects.none(),
+        label='De qual Caixinha?',
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+    
+    DESTINATION_CHOICES = [
+        ('SALDO', 'Resgatar para a Conta (Saldo Livre)'),
+        ('DIVIDA', 'Pagar uma Dívida/Despesa Direta'),
+    ]
+
+    amount = forms.DecimalField(
+        label='Valor do Resgate (R$)',
+        max_digits=10, 
+        decimal_places=2,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'Ex: 150.00', 'step': '0.01'})
+    )
+    
+    destination = forms.ChoiceField(
+        choices=DESTINATION_CHOICES,
+        label='Destino do Dinheiro',
+        widget=forms.RadioSelect(attrs={'class': 'form-check-input'}),
+        initial='SALDO'
+    )
+
+    expense_description = forms.CharField(
+        label='Descrição da Despesa', 
+        max_length=100, 
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex: Fatura Cartão'})
+    )
+    
+    expense_category = forms.ModelChoiceField(
+        queryset=Category.objects.none(), 
+        label='Categoria da Despesa',
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-select'})
+    )
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if user:
+            # Preenche as opções do select com as caixinhas e categorias do usuário
+            self.fields['expense_category'].queryset = Category.objects.for_user(user)
+            self.fields['source_savings_box'].queryset = SavingsBox.objects.for_user(user)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        destination = cleaned_data.get('destination')
+        
+        if destination == 'DIVIDA':
+            if not cleaned_data.get('expense_description'):
+                self.add_error('expense_description', 'Informe a descrição da despesa.')
+            if not cleaned_data.get('expense_category'):
+                self.add_error('expense_category', 'Selecione uma categoria.')
+        return cleaned_data

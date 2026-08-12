@@ -136,10 +136,6 @@ the **delta** (`new_value - old_current_balance`) with a date. This is what make
 "yielded in the last 30 days" / "in the last 12 months" answerable — before this model
 existed, yield was inferred as a single lump gap with no time dimension.
 
-### `SelfLoan`
-"Auto-empréstimo": borrow from a box, pay yourself back with interest via a generated
-`FixedExpense`. Lower-traffic feature; less battle-tested than the rest.
-
 ### `FixedIncome` / `FixedExpense`
 Recurring templates (salary, rent, subscriptions), not the actual monthly occurrences.
 `FixedExpense.is_credit_card` + `credit_card` route a subscription onto a specific
@@ -405,8 +401,6 @@ control. This means:
   created after this field existed.
 - **`create_card_notice.html`** is an orphaned template — no view renders it anymore
   (found during a UI audit). Harmless to leave, but not wired to any URL.
-- **`SelfLoan`** ("Auto-Empréstimo") is a lower-traffic feature that hasn't received
-  the same iteration/bug-fixing attention as the rest of the app.
 - No automated test suite exists yet — verification throughout development has been
   manual, via `python manage.py check` plus ad hoc `django.test.Client` requests run
   through `manage.py shell`.

@@ -21,7 +21,6 @@ urlpatterns = [
     # --- CAIXINHAS E INVESTIMENTOS (O QUE ESTAVA FALTANDO) ---
     path('caixinhas/', views.savings_boxes, name='caixinhas'),
     path('caixinhas/nova/', views.new_savings_box, name='nova_caixinha'),
-    path('caixinhas/emprestimo/', views.new_self_loan, name='novo_emprestimo_proprio'),
     path('caixinhas/editar/<int:id>/', views.edit_savings_box, name='editar_caixinha'),
     path('caixinhas/apagar/<int:id>/', views.delete_savings_box, name='apagar_caixinha'),
     path('caixinhas/detalhes/<int:id>/', views.savings_box_detail, name='detalhes_caixinha'),

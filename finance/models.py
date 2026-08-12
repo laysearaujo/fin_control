@@ -81,19 +81,6 @@ class SavingsBoxYieldEvent(models.Model):
     def __str__(self):
         return f"{self.box.name}: R$ {self.amount} em {self.date}"
 
-class SelfLoan(OwnedModel):
-    source_savings_box = models.ForeignKey(SavingsBox, on_delete=models.CASCADE, verbose_name="Caixinha de Origem")
-    borrowed_amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor Emprestado (R$)")
-    monthly_interest_pct = models.DecimalField(max_digits=5, decimal_places=2, verbose_name="Juros Mensais (%)", help_text="% de juros que você vai se pagar")
-    installments_count = models.IntegerField(verbose_name="Quantidade de Parcelas")
-    start_date = models.DateField(default=timezone.now, verbose_name="Data de Início")
-    active = models.BooleanField(default=True, verbose_name="Ativo")
-
-    def installment_amount(self):
-        # Cálculo simples de juros simples para facilitar (ou Price se quiser avançado)
-        total_with_interest = self.borrowed_amount * (1 + (self.monthly_interest_pct / 100 * self.installments_count))
-        return total_with_interest / self.installments_count
-
 # --- CASH FLOW ---
 class FixedIncome(OwnedModel):
     description = models.CharField(max_length=100, verbose_name="Descrição")
@@ -107,7 +94,6 @@ class FixedExpense(OwnedModel):
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Categoria")
     is_credit_card = models.BooleanField(default=False, verbose_name="É no Cartão de Crédito?")
     credit_card = models.ForeignKey(CreditCard, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Cartão")
-    linked_loan = models.ForeignKey(SelfLoan, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Empréstimo Vinculado")
     target_savings_box = models.ForeignKey('SavingsBox', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Caixinha de Destino", help_text="Se for um aporte, escolha a caixinha de destino")
 
 class Income(OwnedModel):

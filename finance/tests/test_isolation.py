@@ -7,7 +7,7 @@ from django.test import TestCase, Client
 
 from ..models import (
     Category, CreditCard, SavingsBox, FixedIncome, FixedExpense, Income,
-    Transaction, OneOffBill, SelfLoan,
+    Transaction, OneOffBill,
 )
 
 
@@ -31,10 +31,6 @@ class CrossUserIsolationTests(TestCase):
             category=self.category, is_credit_card=False,
         )
         self.bill = OneOffBill.objects.create(owner=self.user_a, title='Conta A', amount=50, due_date='2031-01-15')
-        self.loan = SelfLoan.objects.create(
-            owner=self.user_a, source_savings_box=self.box, borrowed_amount=100,
-            monthly_interest_pct=1, installments_count=3, start_date='2031-01-01',
-        )
 
     # --- Every raw-PK URL that fetches another user's object must 404, never leak/mutate ---
 

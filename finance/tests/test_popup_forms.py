@@ -5,7 +5,7 @@ modal on the same page instead of navigating to a full-page form.
 from django.utils import timezone
 
 from .helpers import AuthenticatedTestCase
-from ..models import Category, CreditCard, FixedExpense, FixedIncome, SavingsBox, SelfLoan
+from ..models import Category, CreditCard, FixedExpense, FixedIncome, SavingsBox
 
 
 class CreditCardPopupTests(AuthenticatedTestCase):
@@ -84,21 +84,3 @@ class SavingsBoxPopupTests(AuthenticatedTestCase):
         self.assertRedirects(response, f'/caixinhas/detalhes/{box.id}/')
         box.refresh_from_db()
         self.assertEqual(box.name, 'Viagem 2026')
-
-
-class SelfLoanPopupTests(AuthenticatedTestCase):
-    def setUp(self):
-        super().setUp()
-        self.box = SavingsBox.objects.create(owner=self.user, name='Reserva', current_balance=1000)
-
-    def test_submitting_the_popup_creates_the_loan_and_moves_the_money(self):
-        response = self.client.post('/caixinhas/emprestimo/', {
-            'source_savings_box': self.box.id, 'borrowed_amount': '300.00',
-            'monthly_interest_pct': '1', 'installments_count': '3',
-            'start_date': str(timezone.now().date()),
-        }, HTTP_REFERER='/caixinhas/')
-
-        self.assertRedirects(response, '/caixinhas/')
-        self.assertTrue(SelfLoan.objects.filter(owner=self.user, source_savings_box=self.box).exists())
-        self.box.refresh_from_db()
-        self.assertEqual(self.box.current_balance, 700)

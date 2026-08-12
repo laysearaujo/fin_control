@@ -186,13 +186,13 @@ def statement(request):
         selected_month = None
         selected_year = None
 
-    # 1. Fetches income entries
+    # 1. Fetches income entries (Adicionado -id para desempate)
     income_entries = Income.objects.for_user(request.user)
     if selected_month and selected_year:
         income_entries = income_entries.filter(date__month=selected_month, date__year=selected_year)
     if query:
         income_entries = income_entries.filter(description__icontains=query)
-    income_entries = income_entries.order_by('-date')
+    income_entries = income_entries.order_by('-date', '-id')
 
     # 2. Fetches expense entries
     expense_entries = Transaction.objects.for_user(request.user)
@@ -200,7 +200,7 @@ def statement(request):
         expense_entries = expense_entries.filter(purchase_date__month=selected_month, purchase_date__year=selected_year)
     if query:
         expense_entries = expense_entries.filter(description__icontains=query)
-    expense_entries = expense_entries.order_by('-purchase_date')
+    expense_entries = expense_entries.order_by('-purchase_date', '-id')  # Ties are broken by ID to ensure a consistent order for same-day purchases
 
     # 3. Merges both lists manually
     movements = []
@@ -212,10 +212,7 @@ def statement(request):
             'amount': income.amount,
             'kind': 'income',  # Marks it as money coming in
             'id': income.id,
-            'source_model': 'income',  # So we know what to delete if needed
-            # Unique auto_id per row so N of these forms can render on the same page
-            # (edited in a popup right here) without every row's fields colliding on
-            # the same #id_description / #id_amount DOM ids
+            'source_model': 'income',
             'edit_form': IncomeForm(instance=income, auto_id=f'edit_income_{income.id}_%s'),
         })
 
@@ -234,8 +231,8 @@ def statement(request):
             'edit_form': TransactionForm(instance=expense, user=request.user, auto_id=f'edit_txn_{expense.id}_%s'),
         })
 
-    # 4. Sorts the final list by date (most recent first)
-    movements.sort(key=lambda x: x['date'], reverse=True)
+    # 4. Sorts the final list by date AND by ID (most recent first)
+    movements.sort(key=lambda x: (x['date'], x['id']), reverse=True)
 
     # 5. Groups the movements by month, so the statement reads as a timeline instead of
     # one giant flat list. Only the current month starts expanded - the rest start

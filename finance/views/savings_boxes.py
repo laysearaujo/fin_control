@@ -8,8 +8,8 @@ from django.utils import timezone
 from django.contrib import messages
 from decimal import Decimal
 
-from ..models import SavingsBox, SavingsBoxYieldEvent, Category, Transaction, Income, FixedExpense, SelfLoan
-from ..forms import SavingsBoxForm, SavingsBoxEditForm, SelfLoanForm
+from ..models import SavingsBox, SavingsBoxYieldEvent, Category, Transaction, Income, FixedExpense
+from ..forms import SavingsBoxForm, SavingsBoxEditForm, WithdrawSavingsBoxForm
 from ._helpers import get_owned_or_404
 
 
@@ -67,10 +67,14 @@ def savings_boxes(request):
         # collide on the same field ids
         box.edit_form = SavingsBoxEditForm(instance=box, auto_id=f'edit_caixinha_{box.id}_%s')
 
+    withdraw_form = WithdrawSavingsBoxForm(user=request.user)
     new_form = SavingsBoxForm(auto_id='new_caixinha_%s')
-    loan_form = SelfLoanForm(user=request.user, auto_id='new_emprestimo_%s')
+
     return render(request, 'savings_boxes.html', {
-        'boxes': box_list, 'total': total_saved, 'new_form': new_form, 'loan_form': loan_form,
+        'boxes': box_list, 
+        'total': total_saved, 
+        'new_form': new_form,
+        'withdraw_form': withdraw_form,
     })
 
 
@@ -121,7 +125,7 @@ def savings_box_detail(request, id):
     # "Evolução do Saldo" chart below, plotted at the date they actually happened.
     history = Transaction.objects.filter(
         Q(target_savings_box=box) | Q(source_savings_box=box)
-    ).order_by('-purchase_date')
+    ).order_by('-purchase_date', '-id')
 
     today = timezone.now().date()
 
@@ -172,14 +176,17 @@ def savings_box_detail(request, id):
         {
             'date': item.purchase_date,
             'order': 0,
+            'id': item.id,
             'change': item.total_amount if item.target_savings_box_id == box.id else -item.total_amount,
         }
         for item in history
     ] + [
-        {'date': event.date, 'order': 1, 'change': event.amount}
+        {'date': event.date, 'order': 1, 'id': event.id, 'change': event.amount}
         for event in box.yield_events.all()
     ]
-    timeline_events.sort(key=lambda e: (e['date'], e['order']))
+    
+    # Ordena o gráfico: 1º por data, 2º por tipo (eventos de yield depois), 3º por id
+    timeline_events.sort(key=lambda e: (e['date'], e['order'], e['id']))
 
     balance_labels = ['Início']
     balance_history_decimal = [box.initial_balance]
@@ -190,10 +197,12 @@ def savings_box_detail(request, id):
         balance_history_decimal.append(running_balance)
     balance_history = [round(float(value), 2) for value in balance_history_decimal]
 
+    withdraw_form = WithdrawSavingsBoxForm(user=request.user, initial={'source_savings_box': box})
+
     context = {
         'box': box,
         'edit_form': SavingsBoxEditForm(instance=box),
-        'loan_form': SelfLoanForm(initial={'source_savings_box': box.id}, user=request.user, auto_id='new_emprestimo_%s'),
+        'withdraw_form': withdraw_form,
         'history': history,
         'amount_left_for_goal': amount_left_for_goal,
         'goal_percentage': goal_percentage,
@@ -213,107 +222,62 @@ def savings_box_detail(request, id):
 
 
 def withdraw_savings_box(request):
-    """Withdraws a partial or total amount from a chosen savings box and logs the transaction in the statement"""
-    box_list = SavingsBox.objects.for_user(request.user)
-    category_list = Category.objects.for_user(request.user)
-
     if request.method == 'POST':
-        box_id = request.POST.get('caixinha_id')
-        withdraw_everything = request.POST.get('zerar_tudo') == 'true'
-        category_id = request.POST.get('categoria')
-        reason_description = request.POST.get('descricao', '').strip()  # Reason for the withdrawal
+        # Mantemos o request.META aqui para saber de onde o usuário veio antes do POST
+        referer = request.META.get('HTTP_REFERER', 'caixinhas')
+        
+        form = WithdrawSavingsBoxForm(request.POST, user=request.user)
+        
+        if form.is_valid():
+            box = form.cleaned_data['source_savings_box']
+            amount = form.cleaned_data['amount']
+            destination = form.cleaned_data['destination']
 
-        box = get_owned_or_404(request, SavingsBox, id=box_id)
-        category_obj = get_owned_or_404(request, Category, id=category_id)
+            if amount > box.current_balance:
+                messages.error(request, 'O valor do resgate é maior que o saldo atual da caixinha.')
+            else:
+                # Subtrai o saldo da caixinha
+                box.current_balance -= amount
+                box.save()
 
-        if withdraw_everything:
-            withdrawal_amount = box.current_balance
+                if destination == 'SALDO':
+                    # 1. Cria a Receita para o dinheiro entrar no saldo livre da conta principal
+                    Income.objects.create(
+                        owner=request.user,
+                        description=f"Resgate da Caixinha: {box.name}",
+                        amount=amount,
+                        date=timezone.now().date()
+                    )
+                    
+                    # 2. Cria a Transação Interna para o Gráfico e Histórico da Caixinha registrarem a saída
+                    Transaction.objects.create(
+                        owner=request.user,
+                        description=f"Resgate para Saldo Livre",
+                        total_amount=amount,
+                        purchase_date=timezone.now().date(),
+                        source_savings_box=box, 
+                        is_internal_transfer=True, # Importante: marca como interna para não sujar suas despesas
+                        is_credit_card=False,
+                        installments_count=1
+                    )
+                    messages.success(request, f'Resgate de R$ {amount} enviado para o saldo livre!')
+
+                elif destination == 'DIVIDA':
+                    Transaction.objects.create(
+                        owner=request.user,
+                        description=form.cleaned_data['expense_description'],
+                        total_amount=amount,
+                        purchase_date=timezone.now().date(),
+                        category=form.cleaned_data['expense_category'],
+                        source_savings_box=box, 
+                        is_credit_card=False,
+                        installments_count=1
+                    )
+                    messages.success(request, 'Dívida paga com sucesso via resgate!')
+
         else:
-            try:
-                withdrawal_amount = Decimal(request.POST.get('valor', '0').replace(',', '.'))
-            except ValueError:
-                withdrawal_amount = Decimal('0.0')
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f"{error}")
 
-        if withdrawal_amount <= 0 or withdrawal_amount > box.current_balance:
-            messages.error(request, f"Valor inválido ou maior que o saldo disponível na caixinha '{box.name}'!")
-            return redirect('resgatar_caixinha')
-
-        # 1. Deducts the balance from the chosen savings box
-        box.current_balance -= withdrawal_amount
-        box.save()
-
-        # 2. Logs the expense in the statement with a clear label
-        category_obj = Category.objects.for_user(request.user).filter(id=category_id).first() if category_id else None
-        final_description = f"Resgate: {reason_description}" if reason_description else f"Resgate da caixinha {box.name}"
-
-        Transaction.objects.create(
-            owner=request.user,
-            description=final_description,
-            total_amount=withdrawal_amount,
-            category=category_obj,
-            purchase_date=timezone.now().date(),
-            source_savings_box=box,  # Direct link to the box (the box is the SOURCE of the money in a withdrawal)
-            is_credit_card=False,
-            is_invoice_payment=False,
-            is_internal_transfer=True,  # Not a real expense: money just changed location, doesn't hit the overall balance
-        )
-
-        messages.success(request, f"Resgate de R$ {withdrawal_amount:.2f} realizado com sucesso da caixinha '{box.name}'!")
-        return redirect('caixinhas')
-
-    return render(request, 'withdraw_savings_box_form.html', {
-        'boxes': box_list,
-        'categories': category_list
-    })
-
-
-def new_self_loan(request):
-    # Grabs the box ID from the URL to pre-select it
-    box_id = request.GET.get('caixinha_id')
-    initial_data = {}
-    if box_id:
-        initial_data['source_savings_box'] = box_id
-
-    form = SelfLoanForm(request.POST or None, initial=initial_data, user=request.user)
-
-    if form.is_valid():
-        loan = form.save(commit=False)
-        loan.owner = request.user
-        box = loan.source_savings_box
-
-        # 1. Takes the money out of the box
-        if box.current_balance < loan.borrowed_amount:
-            # Error handling could go here
-            pass
-        box.current_balance -= loan.borrowed_amount
-        box.save()
-
-        # 2. Puts the money into the checking account (Income)
-        Income.objects.create(
-            owner=request.user,
-            description=f"Empréstimo da {box.name}",
-            amount=loan.borrowed_amount,
-            date=loan.start_date
-        )
-
-        # 3. Creates the obligation to pay it back (temporary fixed expense)
-        installment_amount = loan.installment_amount()
-        loan.save()  # Saves the loan
-
-        FixedExpense.objects.create(
-            owner=request.user,
-            name=f"Pagamento Empréstimo ({box.name})",
-            expected_amount=installment_amount,
-            due_day=loan.start_date.day,
-            # Category could be "Dívidas"
-            linked_loan=loan
-        )
-        # Note: removing this fixed expense after N installments still needs to be built
-
-        # Popup on both Caixinhas and the box's own detail page - back to wherever
-        # it was opened from
-        return redirect(request.META.get('HTTP_REFERER') or 'caixinhas')
-
-    # Invalid popup submission falls back to the classic full-page form so the
-    # validation errors are still visible somewhere
-    return render(request, 'generic_form.html', {'form': form, 'title': '💸 Empréstimo de Mim Mesmo'})
+        return redirect(referer)

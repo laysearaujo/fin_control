@@ -2,7 +2,7 @@ from .dashboard import dashboard
 from .auth import signup
 from .savings_boxes import (
     savings_boxes, new_savings_box, edit_savings_box, delete_savings_box,
-    savings_box_detail, withdraw_savings_box, new_self_loan,
+    savings_box_detail, withdraw_savings_box,
 )
 from .annual_analysis import annual_analysis
 from .transactions import (
