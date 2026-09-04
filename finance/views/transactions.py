@@ -195,7 +195,7 @@ def statement(request):
     income_entries = income_entries.order_by('-date', '-id')
 
     # 2. Fetches expense entries
-    expense_entries = Transaction.objects.for_user(request.user)
+    expense_entries = Transaction.objects.for_user(request.user).exclude(is_internal_transfer=True)
     if selected_month and selected_year:
         expense_entries = expense_entries.filter(purchase_date__month=selected_month, purchase_date__year=selected_year)
     if query:
@@ -228,6 +228,7 @@ def statement(request):
             'installment_amount': expense.total_amount / expense.installments_count,
             'id': expense.id,
             'source_model': 'transaction',
+            'source_box': expense.source_savings_box.name if expense.source_savings_box else None,
             'edit_form': TransactionForm(instance=expense, user=request.user, auto_id=f'edit_txn_{expense.id}_%s'),
         })
 

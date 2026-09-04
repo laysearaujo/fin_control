@@ -16,7 +16,7 @@ def _count_pending_categorization(user):
     assigned. Invoice payments and cheque-especial labels are excluded - they're
     lump sums / cosmetic entries that never have a category by design."""
     return (
-        Transaction.objects.for_user(user).filter(category__isnull=True, is_invoice_payment=False, is_overdraft_payment=False).count()
+        Transaction.objects.for_user(user).filter(category__isnull=True, is_invoice_payment=False, is_overdraft_payment=False, is_internal_transfer=False).count()
         + FixedExpense.objects.for_user(user).filter(category__isnull=True).count()
         + OneOffBill.objects.for_user(user).filter(category__isnull=True).count()
     )

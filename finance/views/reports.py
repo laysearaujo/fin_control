@@ -39,7 +39,7 @@ def compute_month_data(user, m, y):
     # it just came from a caixinha instead of the checking account (only the Dashboard's
     # balance calculation needs to ignore it, not the spend-by-category analysis here)
     debit_total = Transaction.objects.filter(
-        owner=user, is_credit_card=False, is_invoice_payment=False, purchase_date__month=m, purchase_date__year=y
+        owner=user, is_credit_card=False, is_internal_transfer=False, is_invoice_payment=False, purchase_date__month=m, purchase_date__year=y
     ).aggregate(t=Sum('total_amount'))['t'] or 0.0
 
     installments_total = Installment.objects.filter(
@@ -59,7 +59,7 @@ def compute_month_data(user, m, y):
     deposits = 0.0
     if has_real_activity:
         debit_entries = Transaction.objects.filter(
-            owner=user, is_credit_card=False, is_invoice_payment=False, purchase_date__month=m, purchase_date__year=y
+            owner=user, is_credit_card=False, is_internal_transfer=False, is_invoice_payment=False, purchase_date__month=m, purchase_date__year=y
         ).select_related('category')
 
         installment_entries = Installment.objects.filter(
@@ -95,11 +95,10 @@ def _month_status(month_income, month_total, leftover):
 
 
 def _checking_balance_before(user, cutoff_date):
-    """Real checking-account balance carried over from before cutoff_date (same accounting
-    rule as the Dashboard: a savings-box withdrawal doesn't move this balance)."""
+    """Real checking-account balance carried over from before cutoff_date"""
     income_before = Income.objects.filter(owner=user, date__lt=cutoff_date).aggregate(Sum('amount'))['amount__sum'] or 0
     expenses_before = Transaction.objects.filter(
-        owner=user, is_credit_card=False, is_internal_transfer=False, purchase_date__lt=cutoff_date
+        owner=user, is_credit_card=False, is_internal_transfer=False, source_savings_box__isnull=True, purchase_date__lt=cutoff_date
     ).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
     return float(income_before) - float(expenses_before)
 
@@ -157,7 +156,12 @@ def _build_month_rows(user, months, starting_balance, today, total_recurring_fix
         month_resgates = float(Transaction.objects.filter(
             owner=user, is_internal_transfer=True, purchase_date__month=month_ref.month, purchase_date__year=month_ref.year
         ).aggregate(Sum('total_amount'))['total_amount__sum'] or 0)
-        balance_cost = month_cost - month_resgates
+
+        debt_redemptions = float(Transaction.objects.filter(
+            owner=user, source_savings_box__isnull=False, is_internal_transfer=False, purchase_date__month=month_ref.month, purchase_date__year=month_ref.year
+        ).aggregate(Sum('total_amount'))['total_amount__sum'] or 0)
+        
+        balance_cost = month_cost - debt_redemptions
 
         previous_balance = running_balance
         ending_balance = previous_balance + month_income - balance_cost - month_deposits
@@ -211,7 +215,7 @@ def category_report(request):
     # 2. SELECTED MONTH'S DATA (PIE CHART AND DEPOSITS)
     # ==========================================
     debit_expenses = Transaction.objects.filter(
-        owner=request.user, is_credit_card=False, is_invoice_payment=False, purchase_date__month=month, purchase_date__year=year
+        owner=request.user, is_credit_card=False, is_internal_transfer=False, is_invoice_payment=False, purchase_date__month=month, purchase_date__year=year
     ).values('category__id', 'category__name', 'category__reverse_logic').annotate(total=Sum('total_amount'))
 
     installments = Installment.objects.filter(
@@ -282,7 +286,7 @@ def category_report(request):
     # month's "available income" already accounts for what was left over from earlier months
     window_start_date = ref_date - relativedelta(months=5)
     running_checking_balance = float(Income.objects.filter(owner=request.user, date__lt=window_start_date).aggregate(Sum('amount'))['amount__sum'] or 0) - float(
-        Transaction.objects.filter(owner=request.user, is_credit_card=False, is_internal_transfer=False, purchase_date__lt=window_start_date).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+        Transaction.objects.filter(owner=request.user, is_credit_card=False, is_internal_transfer=False, source_savings_box__isnull=True, purchase_date__lt=window_start_date).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
     )
 
     for i in range(5, -1, -1):
@@ -313,7 +317,7 @@ def category_report(request):
         # Rolls the checking balance forward for next month's carryover (excludes savings-box
         # withdrawals, same rule as the Dashboard: a resgate doesn't move the checking balance)
         month_checking_expense_i = float(Transaction.objects.filter(
-            owner=request.user, is_credit_card=False, is_internal_transfer=False, purchase_date__month=month_date.month, purchase_date__year=month_date.year
+            owner=request.user, is_credit_card=False, is_internal_transfer=False, source_savings_box__isnull=True, purchase_date__month=month_date.month, purchase_date__year=month_date.year
         ).aggregate(Sum('total_amount'))['total_amount__sum'] or 0)
         running_checking_balance = available_income_i - month_checking_expense_i
 

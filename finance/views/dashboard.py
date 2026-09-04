@@ -51,7 +51,7 @@ def dashboard(request):
 
     # A. Real balance TODAY
     income_today = Income.objects.filter(owner=user, date__lte=today).aggregate(Sum('amount'))['amount__sum'] or 0
-    expenses_today = Transaction.objects.filter(owner=user, is_credit_card=False, is_internal_transfer=False, purchase_date__lte=today).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+    expenses_today = Transaction.objects.filter(owner=user, is_credit_card=False, is_internal_transfer=False, source_savings_box__isnull=True, purchase_date__lte=today).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
     base_balance = income_today - expenses_today
 
     # B. Pending items for the current month
@@ -118,7 +118,7 @@ def dashboard(request):
 
     else:
         historical_income = Income.objects.filter(owner=user, date__lt=ref_date).aggregate(Sum('amount'))['amount__sum'] or 0
-        historical_expenses = Transaction.objects.filter(owner=user, is_credit_card=False, is_internal_transfer=False, purchase_date__lt=ref_date).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+        historical_expenses = Transaction.objects.filter(owner=user, is_credit_card=False, is_internal_transfer=False, source_savings_box__isnull=True, purchase_date__lt=ref_date).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
         previous_balance = historical_income - historical_expenses
 
     # =========================================================================
@@ -192,7 +192,7 @@ def dashboard(request):
     month_actual_income = Income.objects.filter(owner=user, date__month=ref_date.month, date__year=ref_date.year).aggregate(Sum('amount'))['amount__sum'] or 0
 
     # 2. Actual outflows
-    month_actual_expenses = Transaction.objects.filter(owner=user, is_credit_card=False, is_internal_transfer=False, purchase_date__month=ref_date.month, purchase_date__year=ref_date.year).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+    month_actual_expenses = Transaction.objects.filter(owner=user, is_credit_card=False, is_internal_transfer=False, source_savings_box__isnull=True, purchase_date__month=ref_date.month, purchase_date__year=ref_date.year).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
 
     # Adjusts the forecast in case you got extra money this month (beyond the fixed income)
     income_still_expected = forecast_total_income - month_actual_income
@@ -270,11 +270,12 @@ def dashboard(request):
     # Last 5 movements of the month being viewed (income + expenses combined), so you can
     # glance at the dashboard and immediately see what happened in that month
     recent_income = Income.objects.filter(owner=user, date__month=ref_date.month, date__year=ref_date.year).order_by('-date', '-id')[:5]
-    recent_expenses = Transaction.objects.filter(owner=user, purchase_date__month=ref_date.month, purchase_date__year=ref_date.year).order_by('-purchase_date', '-id')[:5]
+    recent_expenses = Transaction.objects.filter(owner=user, purchase_date__month=ref_date.month, purchase_date__year=ref_date.year).exclude(is_internal_transfer=True).order_by('-purchase_date', '-id')[:5]
 
     recent_movements = []
     for income in recent_income:
         recent_movements.append({
+            'id': income.id,
             'date': income.date,
             'description': income.description,
             'amount': income.amount,
@@ -282,6 +283,7 @@ def dashboard(request):
         })
     for expense in recent_expenses:
         recent_movements.append({
+            'id': expense.id,
             'date': expense.purchase_date,
             'description': expense.description,
             'amount': expense.total_amount,
@@ -290,7 +292,7 @@ def dashboard(request):
             'is_internal_transfer': expense.is_internal_transfer,
             'is_overdraft_payment': expense.is_overdraft_payment,
         })
-    recent_movements.sort(key=lambda m: m['date'], reverse=True)
+    recent_movements.sort(key=lambda m: (m['date'], m['id']), reverse=True)
     recent_movements = recent_movements[:5]
 
     context = {

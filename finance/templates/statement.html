@@ -88,11 +88,19 @@
                                     </span>
                                 {% endif %}
                             {% endif %}
+                            
                             {% if item.is_overdraft_payment %}
                                 <span class="badge bg-warning bg-opacity-10 text-warning border border-warning" style="font-size: 0.65em">🏦 CHEQUE ESPECIAL</span>
                             {% endif %}
+                            
                             {% if item.source_model == 'income' %}
                                 <span class="badge bg-success bg-opacity-10 text-success border border-success" style="font-size: 0.65em">ENTRADA</span>
+                            {% endif %}
+
+                            {% if item.source_box %}
+                                <span class="badge bg-info bg-opacity-10 text-info border border-info" style="font-size: 0.65em">
+                                    PAGO PELA CAIXINHA: {{ item.source_box|upper }}
+                                </span>
                             {% endif %}
                         </td>
 
