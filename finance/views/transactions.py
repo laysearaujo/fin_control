@@ -4,10 +4,10 @@ from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 from datetime import date, datetime
-from dateutil.relativedelta import relativedelta
 
 from ..models import Transaction, Income, FixedIncome, Installment, SavingsBox
 from ..forms import TransactionForm, IncomeForm
+from ..services import build_cartoes_json
 from ._helpers import get_owned_or_404
 from .reports import MESES_PT
 
@@ -100,18 +100,13 @@ def new_transaction(request):
     if request.method == 'POST':
         form = TransactionForm(request.POST, user=request.user)
         if form.is_valid():
-            # Builds the object but doesn't hit the DB yet
             new_transaction_obj = form.save(commit=False)
             new_transaction_obj.owner = request.user
 
             try:
-                # transaction.atomic() ensures both actions (saving the expense and updating the balance) happen together
                 with transaction.atomic():
-                    # 1. Saves the transaction to the DB
-                    new_transaction_obj.save()
+                    new_transaction_obj.save()  # já gera as parcelas sozinho (Transaction.generate_installments)
 
-                    # 2. THE DEPOSIT MAGIC:
-                    # Checks whether the user picked a savings box AND the category has reverse logic (deposit)
                     if new_transaction_obj.target_savings_box and new_transaction_obj.category.reverse_logic:
                         box = new_transaction_obj.target_savings_box
                         box.current_balance += new_transaction_obj.total_amount
@@ -120,12 +115,19 @@ def new_transaction(request):
                 messages.success(request, f"Despesa \"{new_transaction_obj.description}\" de R$ {new_transaction_obj.total_amount:.2f} adicionada!")
                 return redirect(request.META.get('HTTP_REFERER') or 'dashboard')
             except Exception as e:
-                # If something goes wrong, don't crash the app, just log it
                 print(f"Erro ao salvar transação: {e}")
+                messages.error(request, f"Erro ao salvar transação: {e}")
+                return redirect(request.META.get('HTTP_REFERER') or 'dashboard')
     else:
+        # Cria o formulário vazio para requisições GET
         form = TransactionForm(user=request.user)
 
-    return render(request, 'generic_form.html', {'form': form, 'title': '💸 Nova Despesa'})
+    # Se o form for inválido no POST ou se for GET, o código flui para cá e renderiza com segurança:
+    return render(request, 'generic_form.html', {
+        'form': form,
+        'title': '💸 Nova Despesa',
+        'cartoes_json': build_cartoes_json(request.user)
+    })
 
 
 def new_income(request):
@@ -303,24 +305,8 @@ def edit_transaction(request, id):
 
             # If it's (still) a credit card purchase, rebuild the installments using the card's rules
             if saved_txn.is_credit_card and saved_txn.credit_card:
-                # 1. Deletes the old installments linked to this transaction
                 Installment.objects.filter(transaction=saved_txn).delete()
-
-                # 2. Calculates the new amount for each installment
-                installment_amount = saved_txn.total_amount / saved_txn.installments_count
-
-                # 3. Creates the new installments respecting the card's closing date
-                base_date = saved_txn.purchase_date
-                for i in range(saved_txn.installments_count):
-                    current_installment_date = base_date + relativedelta(months=i)
-                    actual_due_date = saved_txn.credit_card.get_actual_due_date(current_installment_date)
-
-                    Installment.objects.create(
-                        transaction=saved_txn,
-                        installment_number=i + 1,
-                        amount=installment_amount,
-                        due_date=actual_due_date
-                    )
+                saved_txn.generate_installments()
             else:
                 # No longer a credit card purchase (or lost its card) - any installments
                 # from before the edit would otherwise be orphaned and keep counting
@@ -333,7 +319,8 @@ def edit_transaction(request, id):
 
     return render(request, 'generic_form.html', {
         'form': form,
-        'title': f'✏️ Editar Transação: {txn.description}'
+        'title': '💸 Nova Despesa',
+        'cartoes_json': build_cartoes_json(request.user)
     })
 
 

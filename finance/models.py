@@ -1,3 +1,5 @@
+from datetime import date
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -33,12 +35,23 @@ class Category(OwnedModel):
 class CreditCard(OwnedModel):
     name = models.CharField(max_length=50, verbose_name="Nome")
     limit = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Limite (R$)")
-    closing_day = models.IntegerField(verbose_name="Dia de Fechamento")
+    closing_day = models.IntegerField(
+        null=True, 
+        blank=True,
+        verbose_name="Dia de Fechamento (Deixe em branco se for variável, ex: Santander)"
+    )
     due_day = models.IntegerField(verbose_name="Dia de Vencimento")
 
     def __str__(self): return self.name
 
     def get_actual_due_date(self, purchase_date):
+        """Mantido por compatibilidade - assume fechamento fixo. Cartões de
+        fechamento variável (closing_day=None) não têm data de corte previsível
+        aqui; quem decide o salto de mês para eles é
+        Transaction.generate_installments(), que também considera
+        force_next_invoice e o histórico closed_months."""
+        if self.closing_day is None:
+            return purchase_date.replace(day=self.due_day)
         if purchase_date.day >= self.closing_day:
             next_month = purchase_date + relativedelta(months=1)
             return next_month.replace(day=self.due_day)
@@ -114,6 +127,10 @@ class Transaction(OwnedModel):
     is_credit_card = models.BooleanField(default=False, verbose_name="É no Cartão de Crédito?")
     credit_card = models.ForeignKey(CreditCard, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Cartão")
     installments_count = models.IntegerField(default=1, verbose_name="Quantidade de Parcelas")
+    force_next_invoice = models.BooleanField(
+        default=False,
+        verbose_name="💳 Cartão já fechou? (Adiar para próxima fatura)"
+    )
 
     fixed_expense = models.ForeignKey(FixedExpense, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Gasto Fixo Correspondente")
     is_invoice_payment = models.BooleanField(default=False, verbose_name="É Pagamento de Fatura?")
@@ -137,13 +154,64 @@ class Transaction(OwnedModel):
             self.generate_installments()
 
     def generate_installments(self):
-        if Installment.objects.filter(transaction=self).exists(): return
-        installment_amount = self.total_amount / self.installments_count
+        """Matemática blindada: decide em quantos meses a compra deve saltar antes
+        de gerar as parcelas.
+
+        - Cartões de fechamento fixo (closing_day preenchido, ex: Nubank): pura
+          matemática de datas.
+        - Cartões de fechamento variável (closing_day em branco, ex: Santander):
+          não dá pra calcular sozinho, então confia na memória mensal
+          (force_next_invoice desta compra, ou de qualquer outra compra no mesmo
+          cartão/mês que já tenha marcado "Já fechou").
+
+        Idempotente: se a transação já tem parcelas, não faz nada (chamado
+        automaticamente pelo save(), então precisa ser seguro pra rodar de novo).
+        """
+        if Installment.objects.filter(transaction=self).exists():
+            return
+
+        due_day = self.credit_card.due_day or 1
+        closing_day = self.credit_card.closing_day
+        installments_count = self.installments_count or 1
+        installment_amount = self.total_amount / installments_count
         base_date = self.purchase_date
-        for i in range(self.installments_count):
-            current_installment_date = base_date + relativedelta(months=i)
-            actual_due_date = self.credit_card.get_actual_due_date(current_installment_date)
-            Installment.objects.create(transaction=self, installment_number=i + 1, amount=installment_amount, due_date=actual_due_date)
+
+        months_ahead = 1 if base_date.day > due_day else 0
+
+        card_already_closed = False
+        if closing_day is not None:
+            if closing_day < due_day:
+                card_already_closed = closing_day <= base_date.day <= due_day
+            else:
+                card_already_closed = base_date.day >= closing_day
+        else:
+            has_manual_close = Transaction.objects.filter(
+                credit_card=self.credit_card,
+                force_next_invoice=True,
+                purchase_date__year=base_date.year,
+                purchase_date__month=base_date.month,
+            ).exclude(pk=self.pk).exists()
+
+            if (self.force_next_invoice or has_manual_close) and base_date.day <= due_day:
+                card_already_closed = True
+
+        if card_already_closed:
+            months_ahead += 1
+
+        base_date += relativedelta(months=months_ahead)
+
+        for i in range(installments_count):
+            current_date = base_date + relativedelta(months=i)
+            due_day_this_month = min(due_day, 28) if current_date.month == 2 else due_day
+            if due_day_this_month == 31 and current_date.month in (4, 6, 9, 11):
+                due_day_this_month = 30
+
+            Installment.objects.create(
+                transaction=self,
+                installment_number=i + 1,
+                amount=installment_amount,
+                due_date=date(current_date.year, current_date.month, due_day_this_month),
+            )
 
 class Installment(models.Model):
     transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE, verbose_name="Transação")

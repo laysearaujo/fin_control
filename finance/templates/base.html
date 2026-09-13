@@ -211,6 +211,10 @@
     // the category's real flag, never by guessing from its name
     const categoryReverseLogicMap = {{ category_reverse_logic_json|safe }};
 
+    // {card_id: {due_day, closing_day, closed_months}} - mesma memória de cartões usada
+    // na página inteira de "Nova Despesa", reaproveitada aqui pro modal rápido da navbar
+    const regrasDosCartoes = {{ cartoes_json|safe|default:"{}" }};
+
     function isReverseLogicCategory(categoryId) {
         return !!categoryReverseLogicMap[categoryId];
     }
@@ -256,6 +260,52 @@
         checkbox.addEventListener('change', atualizar);
     }
 
+    // Wires up a "a fatura já fechou?" question for a given form, identified by its
+    // field id prefix. Regra: cartão de fechamento fixo (closing_day preenchido, ex:
+    // Nubank) nunca pergunta - o backend calcula sozinho. Cartão de fechamento
+    // variável (ex: Santander) pergunta sempre que for selecionado, a não ser que
+    // aquele mês já tenha sido marcado como fechado por outra compra.
+    function wireUpFaturaFechou(prefix) {
+        const cardSelect = document.getElementById(prefix + 'credit_card');
+        const dateInput = document.getElementById(prefix + 'purchase_date');
+        const divBotaoVirada = document.getElementById(prefix + 'div_force_next_invoice');
+        const checkboxVirada = document.getElementById(prefix + 'force_next_invoice');
+
+        if (!cardSelect || !dateInput || !divBotaoVirada || !checkboxVirada) return;
+
+        function avaliar() {
+            if (!cardSelect.value || !dateInput.value) {
+                divBotaoVirada.style.display = "none";
+                checkboxVirada.checked = false;
+                return;
+            }
+
+            const cartao = regrasDosCartoes[cardSelect.value];
+            if (!cartao) return;
+
+            if (cartao.closing_day) {
+                divBotaoVirada.style.display = "none";
+                checkboxVirada.checked = false;
+                return;
+            }
+
+            const dataCompra = new Date(dateInput.value + 'T00:00:00');
+            const mesCompra = dataCompra.getFullYear() + "-" + String(dataCompra.getMonth() + 1).padStart(2, '0');
+
+            if (cartao.closed_months && cartao.closed_months.includes(mesCompra)) {
+                divBotaoVirada.style.display = "none";
+                checkboxVirada.checked = false;
+                return;
+            }
+
+            divBotaoVirada.style.display = "block";
+        }
+
+        avaliar();
+        cardSelect.addEventListener('change', avaliar);
+        dateInput.addEventListener('change', avaliar);
+    }
+
     document.addEventListener("DOMContentLoaded", function() {
         document.querySelectorAll(".toast").forEach(function(toastEl) {
             const toast = new bootstrap.Toast(toastEl, { delay: 4000 });
@@ -266,6 +316,7 @@
         wireUpCaixinhaDestino('navbar_expense_');
         wireUpCaixinhaDestino('id_');
         wireUpCartaoToggle('navbar_expense_');
+        wireUpFaturaFechou('navbar_expense_');
     });
 
     // Clicking anywhere in a date field opens the native calendar picker, not just

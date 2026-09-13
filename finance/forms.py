@@ -19,9 +19,25 @@ class BootstrapModelForm(forms.ModelForm):
                 field.queryset = field.queryset.model.objects.for_user(user) if user else field.queryset.none()
 
 class TransactionForm(BootstrapModelForm):
+    force_next_invoice = forms.BooleanField(
+        required=False,
+        initial=False,
+        label="💳 A fatura deste cartão já fechou?",
+        help_text="Marque só se tiver certeza. Vale pro resto do mês nesse cartão - "
+                   "no próximo ciclo a pergunta volta a aparecer.",
+    )
+
     class Meta:
         model = Transaction
-        fields = ['description', 'total_amount', 'category', 'target_savings_box', 'is_credit_card', 'credit_card', 'installments_count', 'purchase_date']
+        fields = ['description',
+                  'total_amount',
+                  'category',
+                  'target_savings_box',
+                  'is_credit_card',
+                  'credit_card',
+                  'installments_count',
+                  'purchase_date',
+                  'force_next_invoice']
         widgets = {
             'purchase_date': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'),
             'description': forms.TextInput(attrs={'placeholder': 'Ex: Mercado, Uber...'}),
@@ -30,6 +46,7 @@ class TransactionForm(BootstrapModelForm):
             'is_credit_card': forms.CheckboxInput(attrs={'class': 'form-check-input', 'role': 'switch'}),
             'credit_card': forms.Select(attrs={'class': 'form-select'}),
             'installments_count': forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'value': 1}),
+            'force_next_invoice': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
 class FixedIncomeForm(BootstrapModelForm):

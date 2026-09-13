@@ -2,6 +2,7 @@ import json
 
 from .forms import TransactionForm, IncomeForm
 from .models import Category
+from .services import build_cartoes_json
 
 
 def quick_add_forms(request):
@@ -17,4 +18,8 @@ def quick_add_forms(request):
         # Lets JS show/hide the "Caixinha de Destino" field by the category's real
         # reverse_logic flag, instead of guessing from the category's name
         'category_reverse_logic_json': json.dumps(reverse_logic_map),
+        # Mesma memória de cartões (due_day/closing_day/closed_months) usada na página
+        # inteira de "Nova Despesa" - disponível globalmente porque o modal "+ Despesa"
+        # da navbar aparece em toda página, não só na tela de new_transaction
+        'cartoes_json': build_cartoes_json(request.user),
     }

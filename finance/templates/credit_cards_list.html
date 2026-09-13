@@ -44,7 +44,7 @@
                 <h3 class="fw-bold mb-3">R$ {{ card.limit|floatformat:2 }}</h3>
 
                 <div class="d-flex justify-content-between mt-3 pt-3 border-top border-light border-opacity-25 small fw-bold" style="opacity: 0.9;">
-                    <span>Fecha dia: {{ card.closing_day }}</span>
+                    <span>Fecha dia: {% if card.closing_day %}{{ card.closing_day }}{% else %}Variável{% endif %}</span>
                     <span>Vence dia: {{ card.due_day }}</span>
                 </div>
             </div>
@@ -73,7 +73,7 @@
                         <div class="row">
                             <div class="col-6 mb-4">
                                 <label class="form-label fw-bold text-muted small text-uppercase" for="cardClosing{{ card.id }}">Dia Fechamento</label>
-                                <input type="number" min="1" max="31" id="cardClosing{{ card.id }}" name="closing_day" class="form-control form-control-lg" value="{{ card.closing_day }}" required>
+                                <input type="number" min="1" max="31" id="cardClosing{{ card.id }}" name="closing_day" class="form-control form-control-lg" value="{{ card.closing_day|default_if_none:'' }}" placeholder="Deixe em branco se variável">
                             </div>
                             <div class="col-6 mb-4">
                                 <label class="form-label fw-bold text-muted small text-uppercase" for="cardDue{{ card.id }}">Dia Vencimento</label>
@@ -139,7 +139,7 @@
                     <div class="row">
                         <div class="col-6 mb-4">
                             <label class="form-label fw-bold text-muted small text-uppercase" for="newCardClosing">Dia Fechamento</label>
-                            <input type="number" min="1" max="31" id="newCardClosing" name="closing_day" class="form-control form-control-lg" required>
+                            <input type="number" min="1" max="31" id="newCardClosing" name="closing_day" class="form-control form-control-lg" placeholder="Deixe em branco se variável">    
                         </div>
                         <div class="col-6 mb-4">
                             <label class="form-label fw-bold text-muted small text-uppercase" for="newCardDue">Dia Vencimento</label>
