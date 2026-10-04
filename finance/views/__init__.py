@@ -27,3 +27,7 @@ from .reports import category_report, annual_report, category_expense_detail
 from .one_off_bills import (
     add_one_off_bill, pay_one_off_bill, delete_one_off_bill, edit_one_off_bill,
 )
+from .periodic_purchases import (
+    periodic_purchases, new_periodic_purchase, edit_periodic_purchase,
+    delete_periodic_purchase, log_periodic_purchase,
+)

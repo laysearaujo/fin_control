@@ -32,9 +32,21 @@
                         </div>
                     </div>
                 {% endif %}
+
+                {% if form.is_automatic %}
+                    <div class="mb-4 toggle-card toggle-card-success">
+                        <div class="form-check form-switch">
+                            {{ form.is_automatic }}
+                            <label class="form-check-label" for="{{ form.is_automatic.id_for_label }}">
+                                <span class="toggle-title text-success">🤖 Ajustar frequência automaticamente?</span>
+                                <span class="toggle-subtitle">Recalcula pela média real entre as compras confirmadas, em vez do número fixo abaixo.</span>
+                            </label>
+                        </div>
+                    </div>
+                {% endif %}
                 
                 {% for field in form %}
-                    {% if field.name != 'is_credit_card' and field.name != 'reverse_logic' %}
+                    {% if field.name != 'is_credit_card' and field.name != 'reverse_logic' and field.name != 'is_automatic' %}
                         <div class="mb-3" id="div_{{ field.name }}"> 
                             <label class="form-label fw-bold text-muted small text-uppercase" id="label_{{ field.name }}">{{ field.label }}</label>
                             {{ field }}

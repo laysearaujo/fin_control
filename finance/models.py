@@ -138,6 +138,7 @@ class Transaction(OwnedModel):
     invoice_year = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name="Ano da Fatura", help_text="Ano da fatura que este pagamento quita (só para pagamentos de fatura)")
 
     one_off_bill = models.ForeignKey('OneOffBill', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Conta Avulsa Correspondente")
+    periodic_purchase = models.ForeignKey('PeriodicPurchase', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Compra Periódica Correspondente")
 
     target_savings_box = models.ForeignKey('SavingsBox', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Caixinha de Destino")
     source_savings_box = models.ForeignKey('SavingsBox', on_delete=models.SET_NULL, null=True, blank=True, related_name='outgoing_transactions', verbose_name="Caixinha de Origem")
@@ -219,6 +220,65 @@ class Installment(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor (R$)")
     due_date = models.DateField(verbose_name="Data de Vencimento")
     paid = models.BooleanField(default=False, verbose_name="Pago")
+
+class PeriodicPurchase(OwnedModel):
+    """Things bought on a longer, irregular cycle (perfume, hair cream, facial
+    moisturizer...) - not a monthly FixedExpense, but not a single OneOffBill either.
+    Tracks the last purchase and an expected interval so the app can estimate when
+    the next one is coming, instead of it just showing up as a surprise expense.
+
+    interval_months can be set by hand (is_automatic=False) or learned from your own
+    buying history (is_automatic=True): each time a purchase is confirmed, the interval
+    is recalculated as the average gap between all logged purchases, so it drifts
+    toward your real pattern instead of staying stuck at a one-time guess."""
+    name = models.CharField(max_length=100, verbose_name="Nome")
+    estimated_amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor Estimado (R$)")
+    interval_months = models.IntegerField(
+        verbose_name="Frequência (a cada quantos meses)", default=3,
+        help_text="Se 'Ajustar automaticamente' estiver ativo, isso é só o chute inicial - "
+                   "depois de 2+ compras confirmadas o sistema recalcula sozinho."
+    )
+    is_automatic = models.BooleanField(
+        default=False,
+        verbose_name="🤖 Ajustar frequência automaticamente pelo histórico?",
+        help_text="Recalcula a frequência com base na média real entre as compras confirmadas, "
+                   "em vez de manter o número fixo que você digitou."
+    )
+    last_purchase_date = models.DateField(null=True, blank=True, verbose_name="Última Compra")
+    category = models.ForeignKey('Category', on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Categoria")
+    notes = models.CharField(max_length=200, blank=True, verbose_name="Observações")
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def next_expected_date(self):
+        if not self.last_purchase_date:
+            return None
+        return self.last_purchase_date + relativedelta(months=self.interval_months)
+
+    def days_until_next(self, today=None):
+        next_date = self.next_expected_date
+        if next_date is None:
+            return None
+        today = today or date.today()
+        return (next_date - today).days
+
+    def recompute_interval_from_history(self):
+        """Averages the gap (in months) between every confirmed purchase, oldest to
+        newest. Needs at least 2 logged purchases to say anything - with 0 or 1, the
+        manually-set interval_months is left alone as the starting guess. Saves the
+        new value on interval_months so it also shows up correctly if the user later
+        switches this item back to manual."""
+        dates = list(
+            Transaction.objects.filter(periodic_purchase=self).order_by('purchase_date').values_list('purchase_date', flat=True)
+        )
+        if len(dates) < 2:
+            return
+        gaps_days = [(dates[i + 1] - dates[i]).days for i in range(len(dates) - 1)]
+        average_days = sum(gaps_days) / len(gaps_days)
+        self.interval_months = max(1, round(average_days / 30.44))
+
 
 class OneOffBill(OwnedModel):
     title = models.CharField(max_length=100, verbose_name="Título")

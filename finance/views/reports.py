@@ -212,6 +212,21 @@ def category_report(request):
     next_month_url = ref_date + relativedelta(months=1)
 
     # ==========================================
+    # 1B. HISTORY CHART CONTROLS (window length + whether aportes count as "saída")
+    # ==========================================
+    try:
+        janela_meses = int(request.GET.get('meses', 6))
+    except (ValueError, TypeError):
+        janela_meses = 6
+    janela_meses = max(3, min(janela_meses, 36))
+
+    # Default is "excluído" - the line is labeled "Custo de Vida", so what you move into
+    # a caixinha shouldn't inflate it by default. ?incluir_aportes=1 switches it back.
+    incluir_aportes = request.GET.get('incluir_aportes') == '1'
+    janela_opcoes = [3, 6, 12, 24]
+    querystring_extra = f"&meses={janela_meses}&incluir_aportes={'1' if incluir_aportes else '0'}"
+
+    # ==========================================
     # 2. SELECTED MONTH'S DATA (PIE CHART AND DEPOSITS)
     # ==========================================
     debit_expenses = Transaction.objects.filter(
@@ -282,14 +297,14 @@ def category_report(request):
     months_with_real_spend = 0
     sum_real_cost_history = 0.0
 
-    # Checking-account balance carried over from before the 6-month window starts, so the first
+    # Checking-account balance carried over from before the window starts, so the first
     # month's "available income" already accounts for what was left over from earlier months
-    window_start_date = ref_date - relativedelta(months=5)
+    window_start_date = ref_date - relativedelta(months=janela_meses - 1)
     running_checking_balance = float(Income.objects.filter(owner=request.user, date__lt=window_start_date).aggregate(Sum('amount'))['amount__sum'] or 0) - float(
         Transaction.objects.filter(owner=request.user, is_credit_card=False, is_internal_transfer=False, source_savings_box__isnull=True, purchase_date__lt=window_start_date).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
     )
 
-    for i in range(5, -1, -1):
+    for i in range(janela_meses - 1, -1, -1):
         month_date = ref_date - relativedelta(months=i)
         history_labels.append(f"{MESES_PT_ABREV[month_date.month]}/{month_date.strftime('%y')}")
 
@@ -321,11 +336,12 @@ def category_report(request):
         ).aggregate(Sum('total_amount'))['total_amount__sum'] or 0)
         running_checking_balance = available_income_i - month_checking_expense_i
 
-        # Uses the grand total (custo real + aportes), not just custo real: an aporte is money
-        # that really left the checking account too, so "saídas reais" should include it here.
-        # (average_living_cost below still uses actual_cost, excluding aportes on purpose —
+        # Toggle-controlled: by default the line only shows real cost of living (custo real),
+        # matching its "Custo de Vida" label. ?incluir_aportes=1 switches it to the grand total
+        # (custo real + aportes) instead, since an aporte is still money that left the account.
+        # (average_living_cost below always uses actual_cost, excluding aportes on purpose —
         # that one measures cost of living for the emergency-reserve target, a different thing.)
-        history_expenses.append(month_grand_total_i)
+        history_expenses.append(month_grand_total_i if incluir_aportes else month_actual_cost_i)
 
     # Dynamic average based only on months with real activity
     average_divisor = months_with_real_spend if months_with_real_spend > 0 else 1
@@ -426,8 +442,11 @@ def category_report(request):
 
     context = {
         'mes': month, 'ano': year, 'ref_date': ref_date,
-        'prev_month_url': f"?mes={previous_month_url.month}&ano={previous_month_url.year}",
-        'next_month_url': f"?mes={next_month_url.month}&ano={next_month_url.year}",
+        'prev_month_url': f"?mes={previous_month_url.month}&ano={previous_month_url.year}{querystring_extra}",
+        'next_month_url': f"?mes={next_month_url.month}&ano={next_month_url.year}{querystring_extra}",
+        'janela_meses': janela_meses,
+        'janela_opcoes': janela_opcoes,
+        'incluir_aportes': incluir_aportes,
         'labels': expense_labels,
         'data': expense_values,
         # json.dumps (not the raw list) so an uncategorized transaction's None becomes

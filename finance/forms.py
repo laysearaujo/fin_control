@@ -1,5 +1,5 @@
 from django import forms
-from .models import Transaction, Income, CreditCard, Category, FixedExpense, FixedIncome, SavingsBox, OwnedModel
+from .models import Transaction, Income, CreditCard, Category, FixedExpense, FixedIncome, SavingsBox, OwnedModel, PeriodicPurchase
 
 # Estilo padrão para todos os inputs ficarem bonitos
 class BootstrapModelForm(forms.ModelForm):
@@ -94,6 +94,19 @@ class FixedExpenseForm(BootstrapModelForm):
              'credit_card': forms.Select(attrs={'class': 'form-select'}),
              'target_savings_box': forms.Select(attrs={'class': 'form-select'}),
         }
+
+class PeriodicPurchaseForm(BootstrapModelForm):
+    class Meta:
+        model = PeriodicPurchase
+        fields = ['name', 'estimated_amount', 'interval_months', 'is_automatic', 'last_purchase_date', 'category', 'notes']
+        widgets = {
+            'name': forms.TextInput(attrs={'placeholder': 'Ex: Perfume, Creme de Cabelo, Hidratante Facial...'}),
+            'interval_months': forms.NumberInput(attrs={'min': 1, 'placeholder': 'Ex: 3'}),
+            'last_purchase_date': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'),
+            'category': forms.Select(attrs={'class': 'form-select'}),
+            'notes': forms.TextInput(attrs={'placeholder': 'Opcional'}),
+        }
+
 
 class SimulationForm(forms.Form):
     valor_compra = forms.DecimalField(label="Valor da Compra", widget=forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'Ex: 2500.00'}))

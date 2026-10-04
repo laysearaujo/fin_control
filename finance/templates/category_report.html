@@ -61,8 +61,25 @@
     <div class="row mb-4">
         <div class="col-12">
             <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
-                <h5 class="fw-bold text-dark mb-1">📊 Saúde Financeira Histórica</h5>
-                <p class="text-muted small mb-3">Sua linha vermelha de custos reais deve andar sempre abaixo da linha verde (saldo do mês anterior + renda que entrou).</p>
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-1">
+                    <div>
+                        <h5 class="fw-bold text-dark mb-1">📊 Saúde Financeira Histórica</h5>
+                        <p class="text-muted small mb-0">Sua linha vermelha de {% if incluir_aportes %}custos + aportes{% else %}custo real de vida{% endif %} deve andar sempre abaixo da linha verde.</p>
+                    </div>
+                    <form method="get" class="d-flex align-items-center gap-3 flex-wrap">
+                        <input type="hidden" name="mes" value="{{ mes }}">
+                        <input type="hidden" name="ano" value="{{ ano }}">
+                        <div class="form-check form-switch m-0">
+                            <input class="form-check-input" type="checkbox" role="switch" id="incluirAportesSwitch" name="incluir_aportes" value="1" {% if incluir_aportes %}checked{% endif %} onchange="this.form.submit()">
+                            <label class="form-check-label small text-muted" for="incluirAportesSwitch">Contar o que guardei como gasto</label>
+                        </div>
+                        <select name="meses" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
+                            {% for opcao in janela_opcoes %}
+                            <option value="{{ opcao }}" {% if opcao == janela_meses %}selected{% endif %}>Últimos {{ opcao }} meses</option>
+                            {% endfor %}
+                        </select>
+                    </form>
+                </div>
                 <div style="position: relative; height: 260px;">
                     <canvas id="graficoHistorico"></canvas>
                 </div>
@@ -279,7 +296,7 @@
                     fill: true
                 },
                 {
-                    label: 'Saídas Reais (Custo de Vida)',
+                    label: {% if incluir_aportes %}'Saídas Reais (Custo de Vida + Aportes)'{% else %}'Saídas Reais (Custo de Vida)'{% endif %},
                     data: saidasHistorico,
                     borderColor: '#E74C3C',
                     backgroundColor: 'rgba(231, 76, 60, 0.05)',

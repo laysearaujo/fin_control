@@ -71,4 +71,11 @@ urlpatterns = [
     path('pagar-conta-avulsa/<int:id>/', views.pay_one_off_bill, name='pagar_conta_avulsa'),
     path('apagar-conta-avulsa/<int:id>/', views.delete_one_off_bill, name='apagar_conta_avulsa'),
     path('editar-conta-avulsa/<int:id>/', views.edit_one_off_bill, name='editar_conta_avulsa'),
+
+    # --- COMPRAS PERIÓDICAS (não-mensais: perfume, creme de cabelo...) ---
+    path('compras-periodicas/', views.periodic_purchases, name='compras_periodicas'),
+    path('compras-periodicas/nova/', views.new_periodic_purchase, name='nova_compra_periodica'),
+    path('compras-periodicas/editar/<int:id>/', views.edit_periodic_purchase, name='editar_compra_periodica'),
+    path('compras-periodicas/apagar/<int:id>/', views.delete_periodic_purchase, name='apagar_compra_periodica'),
+    path('compras-periodicas/registrar/<int:id>/', views.log_periodic_purchase, name='registrar_compra_periodica'),
 ]
