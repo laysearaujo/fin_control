@@ -44,6 +44,7 @@ urlpatterns = [
     path('categorias/apagar/<int:id>/', views.delete_category, name='apagar_categoria'),
     path('categorias/recategorizar/', views.recategorize_pending, name='recategorizar_pendentes'),
     path('categorias/cadastro/', views.category_cards, name='categorias_cadastro'),
+    path('macro/nova/', views.new_macro, name='new_macro'),
 
     # --- GASTOS FIXOS (CONTAS) ---
     path('fixos/', views.manage_fixed_expenses, name='gerenciar_fixos'),

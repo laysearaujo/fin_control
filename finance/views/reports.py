@@ -231,61 +231,101 @@ def category_report(request):
     # ==========================================
     debit_expenses = Transaction.objects.filter(
         owner=request.user, is_credit_card=False, is_internal_transfer=False, is_invoice_payment=False, purchase_date__month=month, purchase_date__year=year
-    ).values('category__id', 'category__name', 'category__reverse_logic').annotate(total=Sum('total_amount'))
+    ).values('category__id', 'category__name', 'category__reverse_logic', 'macro__id', 'macro__name').annotate(total=Sum('total_amount'))
 
     installments = Installment.objects.filter(
         transaction__owner=request.user, due_date__month=month, due_date__year=year
-    ).select_related('transaction__category')
+    ).select_related('transaction__category', 'transaction__macro')
 
     card_fixed_expenses = FixedExpense.objects.filter(owner=request.user, is_credit_card=True).select_related('category')
 
     NO_CATEGORY_LABEL = 'Sem Categoria'
-    totals_by_category = {}
+    
+    level1_items = {}
+    macros_detail = {}
+    deposit_labels = []
+    deposit_values = []
+    
+    def add_to_hierarchy(m_id, m_name, c_id, c_name, amount):
+        if amount <= 0: return
+        
+        cat_key = str(c_id) if c_id else 'sem_cat'
+        cat_label = c_name if c_name else NO_CATEGORY_LABEL
+        
+        if m_id:
+            # Tem Macro: Aparece como uma fatia de Macro no Nível 1
+            mac_key = f"mac_{m_id}"
+            mac_label = m_name
+
+            if mac_key not in level1_items:
+                level1_items[mac_key] = {'id': str(m_id), 'name': f"📍 {mac_label}", 'total': 0.0, 'type': 'macro'}
+            level1_items[mac_key]['total'] += float(amount)
+            
+            # E a categoria fica escondida dentro dessa Macro no Nível 2
+            if mac_key not in macros_detail:
+                macros_detail[mac_key] = {}
+                
+            if cat_key not in macros_detail[mac_key]:
+                macros_detail[mac_key][cat_key] = {'id': str(c_id) if c_id else '', 'name': cat_label, 'total': 0.0, 'type': 'category'}
+            macros_detail[mac_key][cat_key]['total'] += float(amount)
+            
+        else:
+            # Não tem Macro: A categoria aparece solta direto na raiz (Nível 1)
+            if cat_key not in level1_items:
+                level1_items[cat_key] = {'id': str(c_id) if c_id else '', 'name': cat_label, 'total': 0.0, 'type': 'category'}
+            level1_items[cat_key]['total'] += float(amount)
 
     for entry in debit_expenses:
-        name = entry['category__name'] or NO_CATEGORY_LABEL
-        category_id = entry['category__id'] or None
         is_deposit = bool(entry['category__reverse_logic'])
-        if name not in totals_by_category: totals_by_category[name] = [0.0, category_id, is_deposit]
-        totals_by_category[name][0] += float(entry['total'] or 0)
+        if is_deposit:
+            name = entry['category__name'] or NO_CATEGORY_LABEL
+            if name not in deposit_labels:
+                deposit_labels.append(name)
+                deposit_values.append(0.0)
+            idx = deposit_labels.index(name)
+            deposit_values[idx] += float(entry['total'] or 0)
+        else:
+            add_to_hierarchy(entry.get('macro__id'), entry.get('macro__name'), entry.get('category__id'), entry.get('category__name'), entry['total'] or 0)
 
     for installment in installments:
         category = installment.transaction.category
-        name = category.name if category else NO_CATEGORY_LABEL
-        if name not in totals_by_category: totals_by_category[name] = [0.0, category.id if category else None, bool(category and category.reverse_logic)]
-        totals_by_category[name][0] += float(installment.amount or 0)
+        macro = installment.transaction.macro
+        is_deposit = category.reverse_logic if category else False
+        if is_deposit:
+            name = category.name if category else NO_CATEGORY_LABEL
+            if name not in deposit_labels:
+                deposit_labels.append(name)
+                deposit_values.append(0.0)
+            idx = deposit_labels.index(name)
+            deposit_values[idx] += float(installment.amount or 0)
+        else:
+            m_id = macro.id if macro else None
+            m_name = macro.name if macro else None
+            c_id = category.id if category else None
+            c_name = category.name if category else None
+            add_to_hierarchy(m_id, m_name, c_id, c_name, installment.amount or 0)
 
-    for expense in card_fixed_expenses:
-        name = expense.category.name if expense.category else NO_CATEGORY_LABEL
-        if name not in totals_by_category: totals_by_category[name] = [0.0, expense.category.id if expense.category else None, bool(expense.category and expense.category.reverse_logic)]
-        totals_by_category[name][0] += float(expense.expected_amount or 0)
-
-    # Splits pure expenses from investments for the two pie charts
     month_grand_total, month_deposits_total, month_actual_cost = compute_month_data(request.user, month, year)
-
-    # How much of what you received this month went into deposits/savings
     month_income_total = float(Income.objects.filter(owner=request.user, date__month=month, date__year=year).aggregate(Sum('amount'))['amount__sum'] or 0)
     deposits_pct_of_income = (month_deposits_total / month_income_total * 100) if month_income_total > 0 else 0
 
-    # Sorts the dict by value descending so the side list looks nice
-    sorted_data = sorted(totals_by_category.items(), key=lambda item: item[1][0], reverse=True)
-
-    expense_labels = []
-    expense_values = []
-    expense_ids = []
-
-    deposit_labels = []
-    deposit_values = []
-
-    for name, data in sorted_data:
-        _, category_id, is_deposit = data
+    for expense in card_fixed_expenses:
+        category = expense.category
+        macro = getattr(expense, 'macro', None) 
+        is_deposit = category.reverse_logic if category else False
         if is_deposit:
-            deposit_labels.append(name)
-            deposit_values.append(data[0])
+            name = category.name if category else NO_CATEGORY_LABEL
+            if name not in deposit_labels:
+                deposit_labels.append(name)
+                deposit_values.append(0.0)
+            idx = deposit_labels.index(name)
+            deposit_values[idx] += float(expense.expected_amount or 0)
         else:
-            expense_labels.append(name)
-            expense_values.append(data[0])
-            expense_ids.append(category_id)
+            m_id = macro.id if macro else None
+            m_name = macro.name if macro else None
+            c_id = category.id if category else None
+            c_name = category.name if category else None
+            add_to_hierarchy(m_id, m_name, c_id, c_name, expense.expected_amount or 0)
 
     # ==========================================
     # 3. HISTORY AND SMART AVERAGE CALCULATION
@@ -447,14 +487,8 @@ def category_report(request):
         'janela_meses': janela_meses,
         'janela_opcoes': janela_opcoes,
         'incluir_aportes': incluir_aportes,
-        'labels': expense_labels,
-        'data': expense_values,
-        # json.dumps (not the raw list) so an uncategorized transaction's None becomes
-        # the valid JS token "null" instead of the literal text "None" - the latter is
-        # a JS ReferenceError that silently kills the whole chart-building script,
-        # which is why a month with zero uncategorized spend rendered fine while one
-        # with any "Sem Categoria" transaction showed every chart on the page blank.
-        'category_ids': json.dumps(expense_ids),
+        'level1_items_json': json.dumps(level1_items),
+        'macros_detail_json': json.dumps(macros_detail),
         'deposit_labels': deposit_labels,
         'deposit_values': deposit_values,
         'month_actual_cost': month_actual_cost,

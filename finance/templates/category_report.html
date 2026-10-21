@@ -253,11 +253,11 @@
         };
     }
 
-    // Parâmetros recebidos do Django
-    const labelsDespesas = {{ labels|safe }};
-    const valoresDespesas = {{ data|safe }};
-    const idsDespesas = {{ category_ids|safe }};
+    // NOVOS Parâmetros recebidos do Django para o gráfico de Macro/Categoria
+    const level1Items = JSON.parse('{{ level1_items_json|escapejs }}');
+    const macrosDetail = JSON.parse('{{ macros_detail_json|escapejs }}');
     
+    // Parâmetros antigos mantidos para os outros gráficos
     const labelsAportes = {{ deposit_labels|safe }};
     const valoresAportes = {{ deposit_values|safe }};
 
@@ -270,10 +270,7 @@
     const mes = "{{ mes }}";
     const ano = "{{ ano }}";
 
-    // 16 cores, ordem fixa - validada (contraste + distinção sob daltonismo) com
-    // scripts/validate_palette.js da skill dataviz. Não reordenar/trocar cores
-    // isoladamente sem rodar o validador de novo (a ordem é o que garante a
-    // distinção entre cores vizinhas na pizza).
+    // 16 cores, ordem fixa - validada (contraste + distinção sob daltonismo)
     const coresGastos = [
         '#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948',
         '#4fc3d9', '#b8860b', '#c05299', '#4d7a1f', '#7d6bd0', '#2f4f8f', '#0d9488', '#a0522d',
@@ -354,13 +351,47 @@
         }
     });
 
-    // 2. PIZZA CUSTOS DE VIDA REAIS
-    new Chart(document.getElementById('graficoPizzaDespesas').getContext('2d'), {
+    // =========================================================================
+    // 2. PIZZA CUSTOS DE VIDA REAIS (NOVO: COM DRILL-DOWN PARA MACROS E CATEGORIAS)
+    // =========================================================================
+    let chartLevel = 'nivel1'; 
+    let currentMacroId = null;
+
+    function getChartData() {
+        const labels = [];
+        const data = [];
+        const ids = [];
+        const types = [];
+        
+        if (chartLevel === 'nivel1') {
+            for (const [key, item] of Object.entries(level1Items)) {
+                labels.push(item.name);
+                data.push(item.total);
+                ids.push(item.id);
+                types.push(item.type); // Guarda se é macro ou categoria
+            }
+        } else {
+            const cats = macrosDetail["mac_" + currentMacroId];
+            for (const [key, item] of Object.entries(cats)) {
+                labels.push(item.name);
+                data.push(item.total);
+                ids.push(item.id);
+                types.push(item.type); // Neste nível, todos são category
+            }
+        }
+        
+        return {
+            labels: labels,
+            labels_ids: ids,
+            labels_types: types,
+            datasets: [{ data: data, backgroundColor: coresGastos, borderWidth: 1 }]
+        };
+    }
+
+    const ctxDespesas = document.getElementById('graficoPizzaDespesas').getContext('2d');
+    let graficoPizzaDespesas = new Chart(ctxDespesas, {
         type: 'doughnut',
-        data: {
-            labels: labelsDespesas,
-            datasets: [{ data: valoresDespesas, backgroundColor: coresGastos, borderWidth: 1 }]
-        },
+        data: getChartData(),
         options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -371,16 +402,58 @@
             onClick: (evt, activeElements) => {
                 if (activeElements.length > 0) {
                     const idx = activeElements[0].index;
-                    const catId = idsDespesas[idx];
-                    if (catId) {
-                        window.location.href = `/relatorios/categorias/detalhes/${catId}/?mes=${mes}&ano=${ano}`;
+                    const clicadoId = graficoPizzaDespesas.data.labels_ids[idx];
+                    const clicadoType = graficoPizzaDespesas.data.labels_types[idx];
+                    const clicadoNome = graficoPizzaDespesas.data.labels[idx];
+                    
+                    if (clicadoType === 'macro') {
+                        // Desce para ver o que tem dentro da Macro
+                        currentMacroId = clicadoId;
+                        chartLevel = 'nivel2';
+                        
+                        graficoPizzaDespesas.data = getChartData();
+                        graficoPizzaDespesas.update();
+                        
+                        document.getElementById('tituloGraficoDespesas').innerText = '🍕 Detalhes: ' + clicadoNome;
+                        document.getElementById('subtituloGraficoDespesas').innerText = 'Clique na categoria para ver a lista de compras';
+                        document.getElementById('btnVoltarMacro').classList.remove('d-none');
+                    } else if (clicadoType === 'category') {
+                        // Vai para a lista de despesas
+                        if (clicadoId && clicadoId !== 'sem_cat') {
+                            let url = `/relatorios/categorias/detalhes/${clicadoId}/?mes=${mes}&ano=${ano}`;
+                            // Passa a macro na URL para a próxima tela filtrar direitinho
+                            if (chartLevel === 'nivel2' && currentMacroId) {
+                                url += `&macro=${currentMacroId}`;
+                            } else if (chartLevel === 'nivel1') {
+                                url += `&macro=geral`; 
+                            }
+                            window.location.href = url;
+                        }
                     }
                 }
             }
         }
     });
 
+    // Função para o botão de voltar do gráfico de Macro
+    const btnVoltar = document.getElementById('btnVoltarMacro');
+    if(btnVoltar) {
+        btnVoltar.addEventListener('click', () => {
+            chartLevel = 'nivel1';
+            currentMacroId = null;
+            
+            graficoPizzaDespesas.data = getChartData();
+            graficoPizzaDespesas.update();
+            
+            document.getElementById('tituloGraficoDespesas').innerText = '🍕 Custo Real por Macro';
+            document.getElementById('subtituloGraficoDespesas').innerText = 'Clique na fatia do Projeto para ver as categorias';
+            btnVoltar.classList.add('d-none');
+        });
+    }
+
+    // =========================================================================
     // 3. PIZZA EXCLUSIVO DE APORTES
+    // =========================================================================
     new Chart(document.getElementById('graficoPizzaAportes').getContext('2d'), {
         type: 'doughnut',
         data: {

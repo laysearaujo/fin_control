@@ -1,5 +1,5 @@
 from django import forms
-from .models import Transaction, Income, CreditCard, Category, FixedExpense, FixedIncome, SavingsBox, OwnedModel, PeriodicPurchase
+from .models import Transaction, Income, CreditCard, Category, FixedExpense, FixedIncome, SavingsBox, OwnedModel, PeriodicPurchase, Macro
 
 # Estilo padrão para todos os inputs ficarem bonitos
 class BootstrapModelForm(forms.ModelForm):
@@ -18,6 +18,14 @@ class BootstrapModelForm(forms.ModelForm):
             if isinstance(field, forms.ModelChoiceField) and issubclass(field.queryset.model, OwnedModel):
                 field.queryset = field.queryset.model.objects.for_user(user) if user else field.queryset.none()
 
+class MacroForm(BootstrapModelForm):
+    class Meta:
+        model = Macro
+        fields = ['name']
+        widgets = {
+             'name': forms.TextInput(attrs={'placeholder': 'Ex: Viagem ES, Suape, Reforma...'}),
+        }
+
 class TransactionForm(BootstrapModelForm):
     force_next_invoice = forms.BooleanField(
         required=False,
@@ -32,6 +40,7 @@ class TransactionForm(BootstrapModelForm):
         fields = ['description',
                   'total_amount',
                   'category',
+                  'macro',
                   'target_savings_box',
                   'is_credit_card',
                   'credit_card',
@@ -47,6 +56,7 @@ class TransactionForm(BootstrapModelForm):
             'credit_card': forms.Select(attrs={'class': 'form-select'}),
             'installments_count': forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'value': 1}),
             'force_next_invoice': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'macro': forms.Select(attrs={'class': 'form-select'}),
         }
 
 class FixedIncomeForm(BootstrapModelForm):

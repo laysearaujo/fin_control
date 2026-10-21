@@ -6,8 +6,8 @@ from datetime import date
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
 
-from ..models import Category, FixedIncome, Transaction, Installment, FixedExpense, SavingsBox, OneOffBill
-from ..forms import CategoryForm
+from ..models import Category, FixedIncome, Transaction, Installment, FixedExpense, SavingsBox, OneOffBill, Macro
+from ..forms import CategoryForm, MacroForm
 from ._helpers import get_owned_or_404
 
 
@@ -223,6 +223,16 @@ def save_leftover(request):
 
     return redirect('gerenciar_categorias')
 
+def new_macro(request):
+    form = MacroForm(request.POST or None, user=request.user)
+    if form.is_valid():
+        macro = form.save(commit=False)
+        macro.owner = request.user
+        macro.save()
+        messages.success(request, f"Macro '{macro.name}' criada com sucesso!")
+        return redirect(request.META.get('HTTP_REFERER') or 'dashboard')
+    
+    return render(request, 'generic_form.html', {'form': form, 'title': '📍 Nova Macro / Projeto'})
 
 def new_category(request):
     form = CategoryForm(request.POST or None, user=request.user)

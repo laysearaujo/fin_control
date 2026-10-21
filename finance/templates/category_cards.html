@@ -1,14 +1,20 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
     <div>
-        <h3 class="fw-bold mb-1">📂 Categorias</h3>
-        <p class="text-muted m-0">Suas categorias de gasto e o teto mensal de cada uma.</p>
+        <h3 class="fw-bold mb-1">📂 Categorias e Macros</h3>
+        <p class="text-muted m-0">Suas categorias de gasto e projetos/viagens.</p>
     </div>
-    <button type="button" class="btn btn-dark fw-bold rounded-pill shadow-sm px-4" data-bs-toggle="modal" data-bs-target="#modalNovaCategoria">
-        + Nova Categoria
-    </button>
+
+    <div class="d-flex align-items-center gap-2">
+        <a href="{% url 'new_macro' %}" class="btn btn-outline-dark fw-bold rounded-pill shadow-sm px-4">
+            + Nova Macro
+        </a>
+        <button type="button" class="btn btn-dark fw-bold rounded-pill shadow-sm px-4" data-bs-toggle="modal" data-bs-target="#modalNovaCategoria">
+            + Nova Categoria
+        </button>
+    </div>
 </div>
 
 <div class="row">
