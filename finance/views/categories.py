@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from django.db.models import Sum
+from django.db.models import Sum, Min, Max, Q
 from django.utils import timezone
 from datetime import date
 from dateutil.relativedelta import relativedelta
@@ -223,17 +223,6 @@ def save_leftover(request):
 
     return redirect('gerenciar_categorias')
 
-def new_macro(request):
-    form = MacroForm(request.POST or None, user=request.user)
-    if form.is_valid():
-        macro = form.save(commit=False)
-        macro.owner = request.user
-        macro.save()
-        messages.success(request, f"Macro '{macro.name}' criada com sucesso!")
-        return redirect(request.META.get('HTTP_REFERER') or 'dashboard')
-    
-    return render(request, 'generic_form.html', {'form': form, 'title': '📍 Nova Macro / Projeto'})
-
 def new_category(request):
     form = CategoryForm(request.POST or None, user=request.user)
     if form.is_valid():
@@ -260,6 +249,8 @@ def category_cards(request):
 
     return render(request, 'category_cards.html', {
         'categories': Category.objects.for_user(request.user).order_by('name'),
+        'macros_ativas': Macro.objects.for_user(request.user).filter(is_active=True).order_by('-id'),
+        'macros_encerradas': Macro.objects.for_user(request.user).filter(is_active=False).order_by('-id'),
         'form': form,
     })
 
@@ -322,3 +313,95 @@ def recategorize_pending(request):
         'categories': Category.objects.for_user(request.user),
     }
     return render(request, 'recategorize_pending.html', context)
+
+def new_macro(request):
+    form = MacroForm(request.POST or None, user=request.user)
+    if form.is_valid():
+        macro = form.save(commit=False)
+        macro.owner = request.user
+        macro.save()
+        messages.success(request, f"Macro '{macro.name}' criada com sucesso!")
+        return redirect(request.META.get('HTTP_REFERER') or 'dashboard')
+    
+    return render(request, 'generic_form.html', {'form': form, 'title': '📍 Nova Macro / Projeto'})
+
+def macro_detail(request, id):
+    macro = get_owned_or_404(request, Macro, id=id)
+    # Busca todas as transações que pertencem a este projeto
+    transactions = Transaction.objects.filter(owner=request.user, macro=macro).order_by('-purchase_date', '-id')
+    total_spent = transactions.aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+
+    # 1. Duração Automática ou Manual
+    if macro.start_date and macro.end_date:
+        start_date = macro.start_date
+        end_date = macro.end_date
+    else:
+        dates = transactions.aggregate(start=Min('purchase_date'), end=Max('purchase_date'))
+        start_date = dates['start']
+        end_date = dates['end']
+        
+    duration_days = max(1, (end_date - start_date).days) if start_date and end_date else 0
+
+    # 2. Dados para o Gráfico de Categorias
+    cat_data = transactions.values('category__name').annotate(total=Sum('total_amount')).order_by('-total')
+    chart_labels = [c['category__name'] or 'Sem Categoria' for c in cat_data]
+    chart_values = [float(c['total']) for c in cat_data]
+
+    # 3. Estatísticas da Aba de Análise
+    # 3. Estatísticas da Aba de Análise (Custo Total)
+    maior_despesa = transactions.order_by('-total_amount').first()
+    media_por_dia = (total_spent / duration_days) if duration_days > 0 else total_spent
+
+    # 4. Cálculo do "Dia a Dia" (Ignorando Voo, Hospedagem, Hotel, Passagem)
+    dia_a_dia_qs = transactions.exclude(
+        Q(category__name__icontains='voo') |
+        Q(category__name__icontains='hospedagem') |
+        Q(category__name__icontains='passagem') |
+        Q(category__name__icontains='hotel') |
+        Q(category__name__icontains='airbnb')
+    )
+    total_dia_a_dia = dia_a_dia_qs.aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+    media_dia_a_dia = (total_dia_a_dia / duration_days) if duration_days > 0 else total_dia_a_dia
+
+    return render(request, 'macro_detail.html', {
+        'macro': macro,
+        'transactions': transactions,
+        'total_spent': total_spent,
+        'start_date': start_date,
+        'end_date': end_date,
+        'duration_days': duration_days,
+        'chart_labels': chart_labels,
+        'chart_values': chart_values,
+        'maior_despesa': maior_despesa,
+        'media_por_dia': media_por_dia,
+        'total_dia_a_dia': total_dia_a_dia,
+        'media_dia_a_dia': media_dia_a_dia,
+    })
+
+def encerrar_macro(request, id):
+    macro = get_owned_or_404(request, Macro, id=id)
+    macro.is_active = False  # O botão mágico de desligar!
+    macro.save()
+    messages.success(request, f"Projeto '{macro.name}' encerrado com sucesso!")
+    return redirect('categorias_cadastro')
+
+def editar_datas_macro(request, id):
+    if request.method == 'POST':
+        macro = get_owned_or_404(request, Macro, id=id)
+        start = request.POST.get('start_date')
+        end = request.POST.get('end_date')
+        
+        if start and end:
+            macro.start_date = start
+            macro.end_date = end
+            macro.save()
+            messages.success(request, "Datas da viagem atualizadas!")
+            
+    return redirect('detalhes_macro', id=id)
+
+def reativar_macro(request, id):
+    macro = get_owned_or_404(request, Macro, id=id)
+    macro.is_active = True
+    macro.save()
+    messages.success(request, f"Projeto '{macro.name}' reaberto! Pode adicionar a passagem e encerrar de novo quando terminar.")
+    return redirect('detalhes_macro', id=id)

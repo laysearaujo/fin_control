@@ -1,0 +1,269 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- CABEÇALHO COMPLETO -->
+    <div class="d-flex justify-content-between align-items-start mb-5 flex-wrap gap-4">
+        <div>
+            <a href="javascript:history.back()" class="btn btn-sm btn-light border rounded-pill px-4 py-2 mb-3 fw-bold text-muted shadow-sm hover-shadow" style="transition: all 0.2s;">
+                &larr; Voltar
+            </a>
+            <h1 class="fw-bold m-0 text-dark" style="letter-spacing: -0.5px;">📍 {{ macro.name }}</h1>
+            
+            <div class="d-inline-flex align-items-center bg-white border shadow-sm rounded-pill p-1 mt-3">
+                {% if macro.is_active %}
+            <div class="d-flex gap-2 justify-content-end mt-1">
+                <form method="POST" action="{% url 'encerrar_macro' macro.id %}" class="m-0" onsubmit="return confirm('Tem certeza? O projeto será encerrado e não aparecerá mais nos atalhos de despesa.');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline-danger fw-bold rounded-pill shadow-sm px-4 py-2 bg-white">
+                        🏁 Encerrar
+                    </button>
+                </form>
+            </div>
+            {% else %}
+            <!-- BOTÃO DE REABRIR O PROJETO -->
+            <div class="d-flex gap-2 justify-content-end mt-1">
+                <form method="POST" action="{% url 'reativar_macro' macro.id %}" class="m-0">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline-success fw-bold rounded-pill shadow-sm px-4 py-2 bg-white">
+                        ♻️ Reativar Projeto
+                    </button>
+                </form>
+            </div>
+            {% endif %}
+
+                {% if duration_days > 0 %}
+                    <span class="px-3 small fw-bold text-muted" style="font-size: 0.85rem;">
+                        📅 {{ start_date|date:"d M" }} a {{ end_date|date:"d M Y" }} <span class="text-secondary opacity-25 mx-2">|</span> {{ duration_days }} dias
+                    </span>
+                {% endif %}
+                <!-- Botão de Editar Datas -->
+                <button type="button" class="btn btn-sm btn-light rounded-circle p-1 ms-1" data-bs-toggle="modal" data-bs-target="#modalDatasMacro" title="Editar Datas Reais da Viagem">
+                    ✏️
+                </button>
+            </div>
+        </div>
+        
+        <div class="text-end">
+            <div class="bg-danger bg-opacity-10 border border-danger border-opacity-25 rounded-4 px-4 py-3 mb-3 d-inline-block text-end shadow-sm">
+                <small class="text-danger text-uppercase fw-bold d-block mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">Gasto Total do Projeto</small>
+                <h2 class="fw-bold text-danger m-0">R$ {{ total_spent|floatformat:2 }}</h2>
+            </div>
+            
+            {% if macro.is_active %}
+            <div class="d-flex gap-2 justify-content-end mt-1">
+                <button type="button" class="btn btn-dark fw-bold rounded-pill shadow-sm px-4 py-2" onclick="abrirDespesaDestaMacro('{{ macro.id }}')">
+                    + Despesa
+                </button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- NAVEGAÇÃO DAS ABAS -->
+    <ul class="nav nav-tabs mb-4" id="macroTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active fw-bold text-dark px-4 py-3" id="extrato-tab" data-bs-toggle="tab" data-bs-target="#extrato" type="button" role="tab">
+                📄 Extrato Completo
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link fw-bold text-secondary px-4 py-3" id="analise-tab" data-bs-toggle="tab" data-bs-target="#analise" type="button" role="tab">
+                📊 Análise & Gráficos
+            </button>
+        </li>
+    </ul>
+
+    <!-- CONTEÚDO DAS ABAS -->
+    <div class="tab-content" id="macroTabsContent">
+        
+        <!-- ABA 1: EXTRATO COMPLETO -->
+        <div class="tab-pane fade show active" id="extrato" role="tabpanel">
+            <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="bg-light">
+                            <tr>
+                                <th class="ps-4 py-3 text-secondary small text-uppercase">Data</th>
+                                <th class="py-3 text-secondary small text-uppercase">Descrição</th>
+                                <th class="py-3 text-secondary small text-uppercase">Categoria</th>
+                                <th class="pe-4 py-3 text-secondary small text-uppercase text-end">Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for txn in transactions %}
+                            <tr>
+                                <td class="ps-4 text-muted">{{ txn.purchase_date|date:"d/m/Y" }}</td>
+                                <td class="fw-bold text-dark">
+                                    {{ txn.description }}
+                                    {% if txn.is_credit_card %}
+                                        <span class="badge bg-warning text-dark border border-warning ms-1" style="font-size: 0.65em">CARTÃO</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary bg-opacity-10 text-secondary border">
+                                        {{ txn.category.name|default:"Sem Categoria" }}
+                                    </span>
+                                </td>
+                                <td class="pe-4 text-end fw-bold text-danger">
+                                    - R$ {{ txn.total_amount|floatformat:2 }}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center py-5 text-muted">
+                                    <span class="fs-2 d-block mb-3">📭</span>
+                                    Nenhuma despesa registada neste projeto.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ABA 2: ANÁLISE E GRÁFICOS -->
+        <div class="tab-pane fade" id="analise" role="tabpanel">
+            <div class="row g-4">
+                
+                <!-- COLUNA DOS 3 CARDS PEQUENOS -->
+                <div class="col-md-4">
+                    <div class="d-flex flex-column gap-3 h-100">
+                        
+                        <!-- 1. CUSTO TOTAL (COM TUDO) -->
+                        <div class="card border-0 shadow-sm rounded-4 p-4 bg-white border-start border-4 border-info">
+                            <small class="text-muted text-uppercase fw-bold mb-1">Custo Total / Dia</small>
+                            <h3 class="fw-bold text-dark m-0">R$ {{ media_por_dia|floatformat:2 }} <span class="fs-6 text-muted fw-normal">/ dia</span></h3>
+                        </div>
+                        
+                        <!-- 2. O NOVO CARD: CUSTO DIA A DIA (SEM VOO/HOSPEDAGEM) -->
+                        <div class="card border-0 shadow-sm rounded-4 p-4 bg-white border-start border-4 border-success">
+                            <small class="text-muted text-uppercase fw-bold mb-1">Custo Médio (Sem Voo/Hosp.)</small>
+                            <h4 class="fw-bold text-success m-0">R$ {{ media_dia_a_dia|floatformat:2 }} <span class="fs-6 text-success fw-normal opacity-75">/ dia</span></h4>
+                            <span class="text-muted small mt-1">Total livre: R$ {{ total_dia_a_dia|floatformat:2 }}</span>
+                        </div>
+                        
+                        <!-- 3. MAIOR DESPESA -->
+                        <div class="card border-0 shadow-sm rounded-4 p-4 bg-white border-start border-4 border-danger">
+                            <small class="text-muted text-uppercase fw-bold mb-1">Maior Despesa Única</small>
+                            {% if maior_despesa %}
+                                <h4 class="fw-bold text-danger m-0 mb-1">R$ {{ maior_despesa.total_amount|floatformat:2 }}</h4>
+                                <span class="text-muted small lh-sm">{{ maior_despesa.description }} <br>({{ maior_despesa.category.name|default:"Sem Categoria" }})</span>
+                            {% else %}
+                                <span class="text-muted">Nenhum dado.</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- COLUNA DO GRÁFICO (MANTIDA IGUAL) -->
+                <div class="col-md-8">
+                    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white h-100">
+                        <h5 class="fw-bold text-dark m-0 mb-4">🍕 Gastos por Categoria</h5>
+                        {% if chart_values %}
+                            <div style="position: relative; height: 300px;">
+                                <canvas id="graficoMacroCategorias"></canvas>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-5 text-muted small">Sem dados para o gráfico.</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+</div>
+
+<!-- MODAL PARA EDITAR AS DATAS DA VIAGEM -->
+<div class="modal fade" id="modalDatasMacro" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="fw-bold m-0">📅 Definir Datas da Viagem</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{% url 'editar_datas_macro' macro.id %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <p class="text-muted small mb-4">Defina as datas exatas da viagem para que o custo médio por dia não seja distorcido por passagens compradas com meses de antecedência.</p>
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-muted">Data de Ida</label>
+                            <input type="date" name="start_date" class="form-control" value="{{ macro.start_date|date:'Y-m-d' }}" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-muted">Data de Volta</label>
+                            <input type="date" name="end_date" class="form-control" value="{{ macro.end_date|date:'Y-m-d' }}" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-dark rounded-pill px-4">Salvar Datas</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+
+<!-- SCRIPT DO GRÁFICO E DO BOTÃO MÁGICO -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    function abrirDespesaDestaMacro(macroId) {
+        const radioMacro = document.querySelector(`input[name="macro"][value="${macroId}"]`);
+        if (radioMacro) radioMacro.checked = true;
+        new bootstrap.Modal(document.getElementById('modalNovaDespesa')).show();
+    }
+
+    {% if chart_values %}
+    const coresGastos = [
+        '#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948',
+        '#4fc3d9', '#b8860b', '#c05299', '#4d7a1f'
+    ];
+
+    new Chart(document.getElementById('graficoMacroCategorias').getContext('2d'), {
+        type: 'doughnut',
+        data: {
+            labels: {{ chart_labels|safe }},
+            datasets: [{
+                data: {{ chart_values|safe }},
+                backgroundColor: coresGastos,
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'right' },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            const total = ctx.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                            const pct = total > 0 ? (ctx.parsed / total * 100).toFixed(1) : 0;
+                            return ` ${ctx.label}: R$ ${ctx.parsed.toLocaleString('pt-BR', {minimumFractionDigits: 2})} (${pct}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+    {% endif %}
+
+    // Script para alternar as cores das abas ativas
+    document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(tab => {
+        tab.addEventListener('shown.bs.tab', function (e) {
+            document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(btn => {
+                btn.classList.remove('text-dark');
+                btn.classList.add('text-secondary');
+            });
+            e.target.classList.remove('text-secondary');
+            e.target.classList.add('text-dark');
+        });
+    });
+</script>
+{% endblock %}

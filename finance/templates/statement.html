@@ -145,11 +145,34 @@
                                                 {% endif %}
                                                 {% for field in item.edit_form %}
                                                     {% if field.name != 'is_credit_card' %}
-                                                    <div class="mb-3" id="{% if item.source_model == 'transaction' %}edit_txn_{{ item.id }}{% else %}edit_income_{{ item.id }}{% endif %}_div_{{ field.name }}">
-                                                        <label class="form-label fw-bold text-muted small text-uppercase">{{ field.label }}</label>
-                                                        {{ field }}
-                                                        {% if field.errors %}<div class="text-danger small fw-bold">{{ field.errors }}</div>{% endif %}
-                                                    </div>
+                                                    
+                                                        {% if field.name == 'macro' %}
+                                                            {% if field.field.queryset %} 
+                                                            <div class="mb-3" id="{% if item.source_model == 'transaction' %}edit_txn_{{ item.id }}{% else %}edit_income_{{ item.id }}{% endif %}_div_{{ field.name }}"> 
+                                                                <label class="form-label fw-bold text-muted small text-uppercase">📍 Pertence a algum projeto/viagem?</label>
+                                                                <div class="d-flex flex-wrap gap-2 mt-1">
+                                                                    <div>
+                                                                        <input type="radio" class="btn-check" name="{{ field.html_name }}" id="{{ field.auto_id }}_nenhum" value="" {% if not field.value %}checked{% endif %}>
+                                                                        <label class="btn btn-outline-secondary rounded-pill px-3 py-1" for="{{ field.auto_id }}_nenhum">Nenhum</label>
+                                                                    </div>
+                                                                    {% for radio in field %}
+                                                                        <div>
+                                                                            <input type="radio" class="btn-check" name="{{ radio.data.name }}" id="{{ radio.id_for_label }}" value="{{ radio.data.value }}" {% if radio.data.selected %}checked{% endif %}>
+                                                                            <label class="btn btn-outline-primary rounded-pill px-3 py-1" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+                                                                        </div>
+                                                                    {% endfor %}
+                                                                </div>
+                                                                {% if field.errors %}<div class="text-danger small fw-bold">{{ field.errors }}</div>{% endif %}
+                                                            </div>
+                                                            {% endif %}
+                                                        {% else %}
+                                                            <div class="mb-3" id="{% if item.source_model == 'transaction' %}edit_txn_{{ item.id }}{% else %}edit_income_{{ item.id }}{% endif %}_div_{{ field.name }}">
+                                                                <label class="form-label fw-bold text-muted small text-uppercase">{{ field.label }}</label>
+                                                                {{ field }}
+                                                                {% if field.errors %}<div class="text-danger small fw-bold">{{ field.errors }}</div>{% endif %}
+                                                            </div>
+                                                        {% endif %}
+                                                        
                                                     {% endif %}
                                                 {% endfor %}
                                             </div>

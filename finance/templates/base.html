@@ -143,15 +143,38 @@
                             </label>
                         </div>
                     </div>
-                    {% for field in navbar_expense_form %}
+                   {% for field in navbar_expense_form %}
                         {% if field.name != 'is_credit_card' %}
-                            <div class="mb-3" id="navbar_expense_div_{{ field.name }}">
-                                <label class="form-label fw-bold text-muted small text-uppercase">{{ field.label }}</label>
-                                {{ field }}
-                                {% if field.errors %}
-                                    <div class="text-danger small fw-bold">{{ field.errors }}</div>
+                            
+                            {% if field.name == 'macro' %}
+                                {% if field.field.queryset %} <!-- SÓ APARECE SE TIVER MACRO ATIVA -->
+                                <div class="mb-3" id="navbar_expense_div_{{ field.name }}">
+                                    <label class="form-label fw-bold text-muted small text-uppercase">📍 Pertence a algum projeto/viagem?</label>
+                                    <div class="d-flex flex-wrap gap-2 mt-1">
+                                        <div>
+                                            <input type="radio" class="btn-check" name="{{ field.html_name }}" id="{{ field.auto_id }}_nenhum" value="" checked>
+                                            <label class="btn btn-outline-secondary rounded-pill px-3 py-1" for="{{ field.auto_id }}_nenhum">Nenhum</label>
+                                        </div>
+                                        {% for radio in field %}
+                                            <div>
+                                                <input type="radio" class="btn-check" name="{{ radio.data.name }}" id="{{ radio.id_for_label }}" value="{{ radio.data.value }}" {% if radio.data.selected %}checked{% endif %}>
+                                                <label class="btn btn-outline-primary rounded-pill px-3 py-1" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% if field.errors %}<div class="text-danger small fw-bold mt-1">{{ field.errors }}</div>{% endif %}
+                                </div>
                                 {% endif %}
-                            </div>
+                            {% else %}
+                                <div class="mb-3" id="navbar_expense_div_{{ field.name }}">
+                                    <label class="form-label fw-bold text-muted small text-uppercase">{{ field.label }}</label>
+                                    {{ field }}
+                                    {% if field.errors %}
+                                        <div class="text-danger small fw-bold mt-1">{{ field.errors }}</div>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                            
                         {% endif %}
                     {% endfor %}
                 </div>

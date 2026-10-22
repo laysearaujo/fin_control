@@ -44,7 +44,13 @@ urlpatterns = [
     path('categorias/apagar/<int:id>/', views.delete_category, name='apagar_categoria'),
     path('categorias/recategorizar/', views.recategorize_pending, name='recategorizar_pendentes'),
     path('categorias/cadastro/', views.category_cards, name='categorias_cadastro'),
+
+    # --- MACROS / PROJETOS ---
     path('macro/nova/', views.new_macro, name='new_macro'),
+    path('macro/detalhes/<int:id>/', views.macro_detail, name='detalhes_macro'),
+    path('macro/encerrar/<int:id>/', views.encerrar_macro, name='encerrar_macro'),
+    path('macro/datas/<int:id>/', views.editar_datas_macro, name='editar_datas_macro'),
+    path('macro/reativar/<int:id>/', views.reativar_macro, name='reativar_macro'),
 
     # --- GASTOS FIXOS (CONTAS) ---
     path('fixos/', views.manage_fixed_expenses, name='gerenciar_fixos'),

@@ -35,6 +35,14 @@ class TransactionForm(BootstrapModelForm):
                    "no próximo ciclo a pergunta volta a aparecer.",
     )
 
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, user=user, **kwargs)
+        if user:
+            # Filtra apenas as macros ativas (projetos não encerrados)
+            self.fields['macro'].queryset = Macro.objects.for_user(user).filter(is_active=True)
+            self.fields['macro'].required = False # A tag de projeto é opcional
+            self.fields['macro'].empty_label = None # Remove o "---------", não precisamos dele em botões
+
     class Meta:
         model = Transaction
         fields = ['description',
@@ -56,7 +64,7 @@ class TransactionForm(BootstrapModelForm):
             'credit_card': forms.Select(attrs={'class': 'form-select'}),
             'installments_count': forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'value': 1}),
             'force_next_invoice': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'macro': forms.Select(attrs={'class': 'form-select'}),
+            'macro': forms.RadioSelect(attrs={'class': 'btn-check'}),
         }
 
 class FixedIncomeForm(BootstrapModelForm):
